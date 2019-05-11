@@ -45,7 +45,7 @@ const Exchange  = require ('./js/base/Exchange')
 //-----------------------------------------------------------------------------
 // this is updated by vss.js when building
 
-const version = '1.18.520'
+const version = '1.18.515'
 
 Exchange.ccxtVersion = version
 
@@ -5766,9 +5766,7 @@ module.exports = class bibox extends Exchange {
             request['symbol'] = currency['id'];
         }
         if (limit !== undefined) {
-            request['size'] = limit;
-        } else {
-            request['size'] = 100;
+            request['size'] = limit; // default = 100
         }
         const response = await this.privatePostTransfer ({
             'cmd': 'transfer/transferInList',
@@ -5792,9 +5790,7 @@ module.exports = class bibox extends Exchange {
             request['symbol'] = currency['id'];
         }
         if (limit !== undefined) {
-            request['size'] = limit;
-        } else {
-            request['size'] = 100;
+            request['size'] = limit; // default = 100
         }
         const response = await this.privatePostTransfer ({
             'cmd': 'transfer/transferOutList',
@@ -26703,12 +26699,12 @@ module.exports = class coinegg extends Exchange {
                 'fetchOrders': true,
                 'fetchOpenOrders': 'emulated',
                 'fetchMyTrades': true,
-                'fetchTickers': false,
+                'fetchTickers': true,
             },
             'urls': {
                 'logo': 'https://user-images.githubusercontent.com/1294454/36770310-adfa764e-1c5a-11e8-8e09-449daac3d2fb.jpg',
                 'api': {
-                    'web': 'https://trade.coinegg.com/web',
+                    'web': 'https://www.coinegg.com/coin',
                     'rest': 'https://api.coinegg.com/api/v1',
                 },
                 'www': 'https://www.coinegg.com',
@@ -26719,7 +26715,7 @@ module.exports = class coinegg extends Exchange {
             'api': {
                 'web': {
                     'get': [
-                        'symbol/ticker?right_coin={quote}',
+                        '{quote}/allcoin',
                         '{quote}/trends',
                         '{quote}/{base}/order',
                         '{quote}/{base}/trades',
@@ -26841,20 +26837,23 @@ module.exports = class coinegg extends Exchange {
         let result = [];
         for (let b = 0; b < quoteIds.length; b++) {
             let quoteId = quoteIds[b];
-            let response = await this.webGetSymbolTickerRightCoinQuote ({
+            let bases = await this.webGetQuoteAllcoin ({
                 'quote': quoteId,
             });
-            let tickers = response.data;
-            if (tickers === undefined)
-                throw new ExchangeNotAvailable (this.id + ' fetchMarkets() for "' + quoteId + '" returned: "' + this.json (response) + '"');
-            for (let i = 0; i < tickers.length; i++) {
-                let ticker = tickers[i];
-                let id = ticker['symbol'];
-                let baseId = id.split ('_')[0];
+            if (bases === undefined)
+                throw new ExchangeNotAvailable (this.id + ' fetchMarkets() for "' + quoteId + '" returned: "' + this.json (bases) + '"');
+            let baseIds = Object.keys (bases);
+            let numBaseIds = baseIds.length;
+            if (numBaseIds < 1)
+                throw new ExchangeNotAvailable (this.id + ' fetchMarkets() for "' + quoteId + '" returned: "' + this.json (bases) + '"');
+            for (let i = 0; i < baseIds.length; i++) {
+                let baseId = baseIds[i];
+                let market = bases[baseId];
                 let base = baseId.toUpperCase ();
                 let quote = quoteId.toUpperCase ();
                 base = this.commonCurrencyCode (base);
                 quote = this.commonCurrencyCode (quote);
+                let id = baseId + quoteId;
                 let symbol = base + '/' + quote;
                 let precision = {
                     'amount': 8,
@@ -26883,7 +26882,7 @@ module.exports = class coinegg extends Exchange {
                             'max': undefined,
                         },
                     },
-                    'info': ticker,
+                    'info': market,
                 });
             }
         }
@@ -26936,6 +26935,42 @@ module.exports = class coinegg extends Exchange {
             'quote': market['quoteId'],
         }, params));
         return this.parseTicker (ticker, market);
+    }
+
+    async fetchTickers (symbols = undefined, params = {}) {
+        await this.loadMarkets ();
+        let quoteIds = this.options['quoteIds'];
+        let result = {};
+        for (let b = 0; b < quoteIds.length; b++) {
+            let quoteId = quoteIds[b];
+            let tickers = await this.webGetQuoteAllcoin ({
+                'quote': quoteId,
+            });
+            let baseIds = Object.keys (tickers);
+            if (!baseIds.length) {
+                throw new ExchangeError ('fetchTickers failed');
+            }
+            for (let i = 0; i < baseIds.length; i++) {
+                let baseId = baseIds[i];
+                let ticker = tickers[baseId];
+                let id = baseId + quoteId;
+                if (id in this.markets_by_id) {
+                    let market = this.marketsById[id];
+                    let symbol = market['symbol'];
+                    result[symbol] = this.parseTicker ({
+                        'high': ticker[4],
+                        'low': ticker[5],
+                        'buy': ticker[2],
+                        'sell': ticker[3],
+                        'last': ticker[1],
+                        'change': ticker[8],
+                        'vol': ticker[6],
+                        'quoteVol': ticker[7],
+                    }, market);
+                }
+            }
+        }
+        return result;
     }
 
     async fetchOrderBook (symbol, limit = undefined, params = {}) {
@@ -27123,6 +27158,8 @@ module.exports = class coinegg extends Exchange {
         let url = this.urls['api'][apiType] + '/' + this.implodeParams (path, params);
         let query = this.omit (params, this.extractParams (path));
         if (api === 'public' || api === 'web') {
+            if (api === 'web')
+                query['t'] = this.nonce ();
             if (Object.keys (query).length)
                 url += '?' + this.urlencode (query);
         } else {
@@ -44606,8 +44643,8 @@ module.exports = class hitbtc2 extends hitbtc {
                 feeCost += trades[i]['fee']['cost'];
                 sumOfPrices += trades[i]['price'];
             }
-            if ((cost !== undefined) && (filled !== undefined) && (filled > 0)) {
-                average = cost / filled;
+            if ((sumOfPrices !== undefined) && (numTrades > 0)) {
+                average = sumOfPrices / numTrades;
                 if (type === 'market') {
                     if (price === undefined) {
                         price = average;

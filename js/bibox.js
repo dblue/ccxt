@@ -446,9 +446,7 @@ module.exports = class bibox extends Exchange {
             request['symbol'] = currency['id'];
         }
         if (limit !== undefined) {
-            request['size'] = limit;
-        } else {
-            request['size'] = 100;
+            request['size'] = limit; // default = 100
         }
         const response = await this.privatePostTransfer ({
             'cmd': 'transfer/transferInList',
@@ -472,9 +470,7 @@ module.exports = class bibox extends Exchange {
             request['symbol'] = currency['id'];
         }
         if (limit !== undefined) {
-            request['size'] = limit;
-        } else {
-            request['size'] = 100;
+            request['size'] = limit; // default = 100
         }
         const response = await this.privatePostTransfer ({
             'cmd': 'transfer/transferOutList',

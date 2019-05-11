@@ -34,12 +34,12 @@ class coinegg (Exchange):
                 'fetchOrders': True,
                 'fetchOpenOrders': 'emulated',
                 'fetchMyTrades': True,
-                'fetchTickers': False,
+                'fetchTickers': True,
             },
             'urls': {
                 'logo': 'https://user-images.githubusercontent.com/1294454/36770310-adfa764e-1c5a-11e8-8e09-449daac3d2fb.jpg',
                 'api': {
-                    'web': 'https://trade.coinegg.com/web',
+                    'web': 'https://www.coinegg.com/coin',
                     'rest': 'https://api.coinegg.com/api/v1',
                 },
                 'www': 'https://www.coinegg.com',
@@ -50,7 +50,7 @@ class coinegg (Exchange):
             'api': {
                 'web': {
                     'get': [
-                        'symbol/ticker?right_coin={quote}',
+                        '{quote}/allcoin',
                         '{quote}/trends',
                         '{quote}/{base}/order',
                         '{quote}/{base}/trades',
@@ -171,20 +171,23 @@ class coinegg (Exchange):
         result = []
         for b in range(0, len(quoteIds)):
             quoteId = quoteIds[b]
-            response = self.webGetSymbolTickerRightCoinQuote({
+            bases = self.webGetQuoteAllcoin({
                 'quote': quoteId,
             })
-            tickers = response.data
-            if tickers is None:
-                raise ExchangeNotAvailable(self.id + ' fetchMarkets() for "' + quoteId + '" returned: "' + self.json(response) + '"')
-            for i in range(0, len(tickers)):
-                ticker = tickers[i]
-                id = ticker['symbol']
-                baseId = id.split('_')[0]
+            if bases is None:
+                raise ExchangeNotAvailable(self.id + ' fetchMarkets() for "' + quoteId + '" returned: "' + self.json(bases) + '"')
+            baseIds = list(bases.keys())
+            numBaseIds = len(baseIds)
+            if numBaseIds < 1:
+                raise ExchangeNotAvailable(self.id + ' fetchMarkets() for "' + quoteId + '" returned: "' + self.json(bases) + '"')
+            for i in range(0, len(baseIds)):
+                baseId = baseIds[i]
+                market = bases[baseId]
                 base = baseId.upper()
                 quote = quoteId.upper()
                 base = self.common_currency_code(base)
                 quote = self.common_currency_code(quote)
+                id = baseId + quoteId
                 symbol = base + '/' + quote
                 precision = {
                     'amount': 8,
@@ -213,7 +216,7 @@ class coinegg (Exchange):
                             'max': None,
                         },
                     },
-                    'info': ticker,
+                    'info': market,
                 })
         return result
 
@@ -261,6 +264,37 @@ class coinegg (Exchange):
             'quote': market['quoteId'],
         }, params))
         return self.parse_ticker(ticker, market)
+
+    def fetch_tickers(self, symbols=None, params={}):
+        self.load_markets()
+        quoteIds = self.options['quoteIds']
+        result = {}
+        for b in range(0, len(quoteIds)):
+            quoteId = quoteIds[b]
+            tickers = self.webGetQuoteAllcoin({
+                'quote': quoteId,
+            })
+            baseIds = list(tickers.keys())
+            if not len(baseIds):
+                raise ExchangeError('fetchTickers failed')
+            for i in range(0, len(baseIds)):
+                baseId = baseIds[i]
+                ticker = tickers[baseId]
+                id = baseId + quoteId
+                if id in self.markets_by_id:
+                    market = self.marketsById[id]
+                    symbol = market['symbol']
+                    result[symbol] = self.parse_ticker({
+                        'high': ticker[4],
+                        'low': ticker[5],
+                        'buy': ticker[2],
+                        'sell': ticker[3],
+                        'last': ticker[1],
+                        'change': ticker[8],
+                        'vol': ticker[6],
+                        'quoteVol': ticker[7],
+                    }, market)
+        return result
 
     def fetch_order_book(self, symbol, limit=None, params={}):
         self.load_markets()
@@ -430,6 +464,8 @@ class coinegg (Exchange):
         url = self.urls['api'][apiType] + '/' + self.implode_params(path, params)
         query = self.omit(params, self.extract_params(path))
         if api == 'public' or api == 'web':
+            if api == 'web':
+                query['t'] = self.nonce()
             if query:
                 url += '?' + self.urlencode(query)
         else:

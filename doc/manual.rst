@@ -1406,7 +1406,7 @@ This is the type of pagination currently used throughout the CCXT Unified API. T
            const trades = await exchange.fetchTrades (symbol, since, limit)
            if (trades.length) {
                since = trades[trades.length - 1]['timestamp']
-               allTrades = allTrades.concat (trades)
+               allTrades.push (trades)
            } else {
                break
            }

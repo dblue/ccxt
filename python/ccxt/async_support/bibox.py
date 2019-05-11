@@ -429,9 +429,7 @@ class bibox (Exchange):
             currency = self.currency(code)
             request['symbol'] = currency['id']
         if limit is not None:
-            request['size'] = limit
-        else:
-            request['size'] = 100
+            request['size'] = limit  # default = 100
         response = await self.privatePostTransfer({
             'cmd': 'transfer/transferInList',
             'body': self.extend(request, params),
@@ -451,9 +449,7 @@ class bibox (Exchange):
             currency = self.currency(code)
             request['symbol'] = currency['id']
         if limit is not None:
-            request['size'] = limit
-        else:
-            request['size'] = 100
+            request['size'] = limit  # default = 100
         response = await self.privatePostTransfer({
             'cmd': 'transfer/transferOutList',
             'body': self.extend(request, params),
