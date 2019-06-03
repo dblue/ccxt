@@ -1,6 +1,9 @@
 # frozen_string_literal: true
-
-require 'rest-client'
+require 'async'
+require 'async/await'
+require 'async/http'
+require 'async/http/internet'
+# require 'rest-client'
 require 'json'
 require 'base64'
 require 'securerandom'
@@ -16,6 +19,9 @@ require 'eth'
 module Ccxt
   # base class for the exchange
   class Exchange
+    include Async::Await
+    include Async::HTTP
+    
     include DecimalToPrecision
     include ExchangeHelpers
 
@@ -244,7 +250,7 @@ module Ccxt
 
     ## PUBLIC
 
-    def load_markets(reload = false, params = {})
+    async def load_markets(reload = false, params = {})
       if !reload && self.markets
         puts 'load_markets: already set.' if verbose
         if !self.markets_by_id
@@ -254,36 +260,36 @@ module Ccxt
         return self.markets
       end
       puts 'load_markets: loading markets.' if verbose
-      currencies = fetch_currencies if has['fetchCurrencies']
-      markets = self.fetch_markets(params)
+      currencies = await{ fetch_currencies } if has['fetchCurrencies']
+      markets = await {self.fetch_markets(params)}
       return set_markets(markets, currencies)
     end
 
-    def load_accounts(reload = false, params = {})
+    async def load_accounts(reload = false, params = {})
       if reload
-        self.accounts = self.fetch_accounts(params)
+        self.accounts = await{ self.fetch_accounts(params) }
       else
         if self.accounts
           return self.accounts
         else
-          self.accounts = self.fetch_accounts(params)
+          self.accounts = await{ self.fetch_accounts(params) }
         end
       end
       self.accountsById = index_by(self.accounts, 'id')
       return self.accounts
     end
 
-    def load_fees(reload = false)
+    async def load_fees(reload = false)
       if !reload
         if self.loaded_fees != Exchange.loaded_fees
           return self.loaded_fees
         end
       end
-      self.loaded_fees = deep_extend(self.loaded_fees, self.fetch_fees)
+      self.loaded_fees = deep_extend(self.loaded_fees, await{ self.fetch_fees })
       return self.loaded_fees
     end
 
-    def fetch_markets(params = {})
+    async def fetch_markets(params = {})
       # markets are returned as a list
       # currencies are returned as a dict
       # this is for historical reasons
@@ -291,38 +297,38 @@ module Ccxt
       return to_array self.markets
     end
 
-    def fetch_currencies(params = {})
+    async def fetch_currencies(params = {})
       return self.currencies
     end
 
-    def fetch_ticker(symbol = nil, params = {})
+    async def fetch_ticker(symbol = nil, params = {})
       raise NotSupported, 'fetch_ticker is not supported yet.'
     end
 
-    def fetch_tickers(symbols = nil, params = {})
+    async def fetch_tickers(symbols = nil, params = {})
       raise NotSupported, 'API does not allow to fetch all tickers at once with a single call to fetch_tickers() for now'
     end
 
-    def fetch_order_book()
+    async def fetch_order_book()
       raise NotSupported, 'fetch_order_book is not supported yet.'
     end
 
-    def fetch_OHLCV(symbol, timeframe = '1m', since = nil, limit = nil, params = {})
+    async def fetch_OHLCV(symbol, timeframe = '1m', since = nil, limit = nil, params = {})
       raise(NotSupported, 'fetch_ohlcv() is not supported yet.') unless self.has['fetchTrades']
 
       self.load_markets
-      trades = self.fetch_trades(symbol, since, limit, params)
+      trades = await{ self.fetch_trades(symbol, since, limit, params) }
       return self.build_ohlcv(trades, timeframe, since, limit)
     end
 
-    def fetch_fees
+    async def fetch_fees
       trading = {}
       funding = {}
       if self.has['fetchTradingFees']
-        trading = self.fetch_trading_fees
+        trading = await {self.fetch_trading_fees}
       end
       if self.has['fetchFundingFees']
-        funding = self.fetch_funding_fees
+        funding = await {self.fetch_funding_fees}
       end
       return {
         'trading' => trading,
@@ -341,8 +347,8 @@ module Ccxt
       return balance
     end
 
-    def fetch_partial_balance(part, params = {})
-      balance = self.fetch_balance(params)
+    async def fetch_partial_balance(part, params = {})
+      balance = await{ self.fetch_balance(params) }
       return balance[part]
     end
 
@@ -376,10 +382,10 @@ module Ccxt
       return self.fetch_funding_fees(params)
     end
 
-    def load_trading_limits(symbols = nil, reload = false, params = {})
+    async def load_trading_limits(symbols = nil, reload = false, params = {})
       if self.has['fetchTradingLimits']
         if reload || !self.options.keys.include?('limitsLoaded')
-          response = self.fetch_trading_limits(symbols)
+          response = await{ self.fetch_trading_limits(symbols) }
           symbols.each do |symbol|
             self.markets[symbol] = deep_extend(self.markets[symbol], response[symbol])
           end
@@ -423,8 +429,8 @@ module Ccxt
       raise NotSupported, 'fetch_closed_orders() is not supported yet'
     end
 
-    def fetch_order_status(id, symbol = nil, params = {})
-      order = self.fetch_order(id, symbol, params)
+    async def fetch_order_status(id, symbol = nil, params = {})
+      order = await{ self.fetch_order(id, symbol, params) }
       return order['status']
     end
 
@@ -513,8 +519,8 @@ module Ccxt
       return result
     end
 
-    def fetch_l2_order_book(symbol, limit = nil, params = {})
-      orderbook = self.fetch_order_book(symbol, limit, params)
+    async def fetch_l2_order_book(symbol, limit = nil, params = {})
+      orderbook = await{ self.fetch_order_book(symbol, limit, params) }
       orderbook.merge(
         'bids' => sort_by(aggregate(orderbook['bids']), 0, true),
         'asks' => sort_by(aggregate(orderbook['asks']), 0)
@@ -695,14 +701,16 @@ module Ccxt
       end
     end
 
-    def fetch2(path, api = 'public', method = 'GET', params = {}, headers = nil, body = nil)
-      throttle if enableRateLimit
+    async def fetch2(path, api = 'public', method = 'GET', params = {}, headers = nil, body = nil)
+      await{ throttle } if enableRateLimit
       self.lastRestRequestTimestamp = milliseconds
+      puts "path: #{path}" if self.verbose
+      puts "params: #{params.inspect}" if self.verbose
       request = sign(path, api, method, params, headers, body)
-      return fetch(request['url'], request['method'], request['headers'], request['body'])
+      return await{ fetch(request['url'], request['method'], request['headers'], request['body'])  }
     end
 
-    def fetch(url, method = 'GET', request_headers = {}, payload = {})
+    async def fetch(url, method = 'GET', request_headers = {}, payload = {})
       request_headers = prepare_request_headers(request_headers || {})
 
       puts "\nRequest:\nmethod: #{method.inspect}\nurl: #{url.inspect}\nheaders: #{request_headers.inspect}\npayload: #{payload.inspect}" if self.verbose
@@ -713,12 +721,14 @@ module Ccxt
       http_response = nil
       json_response = nil
       begin
-        response = RestClient::Request.execute(
-          method: method.downcase.to_sym,
-          url: url,
-          headers: request_headers,
-          payload: payload
-        )
+        internet = Async::HTTP::Internet.new
+        response = internet.call(method.downcase, url, headers, payload).read
+        # response = RestClient::Request.execute(
+        #   method: method.downcase.to_sym,
+        #   url: url,
+        #   headers: request_headers,
+        #   payload: payload
+        # )
         http_response = response.body
         json_response = is_json_encoded_object(http_response) ? JSON.parse(http_response) : nil
         headers = response.headers
@@ -731,8 +741,8 @@ module Ccxt
         # rescue Timeout
         #    except Timeout as e:
         #        self.raise_error(RequestTimeout, method, url, e)
-      rescue RestClient::RequestTimeout => e
-        self.raise_error(RequestTimeout, method, url, e)
+        # rescue RestClient::RequestTimeout => e
+        # self.raise_error(RequestTimeout, method, url, e)
 
         #    except TooManyRedirects as e:
         #        self.raise_error(ExchangeError, url, method, e)
@@ -756,9 +766,11 @@ module Ccxt
         #        else:
         #            self.raise_error(ExchangeError, url, method, e)
         #
-      rescue RestClient::ExceptionWithResponse => e
+      rescue StandardError => e
         raise e, response.inspect
         return e
+      ensure
+        internet.close
       end
 
       handle_errors(response.code, response.body, url, method, headers, http_response, json_response)
@@ -795,7 +807,7 @@ module Ccxt
 
     # request is the main function for define_rest_api()
     def request(path, api = 'public', method = 'GET', params = {}, headers = nil, body = nil)
-      return fetch2(path, api, method, params, headers, body)
+      return await{ fetch2(path, api, method, params, headers, body) }
     end
 
     def define_rest_api(method_name, options = {})
@@ -1005,16 +1017,16 @@ module Ccxt
       }
     end
 
-    def edit_limit_buy_order(id, symbol, *args)
-      return self.edit_limit_order(id, symbol, 'buy', *args)
+    async def edit_limit_buy_order(id, symbol, *args)
+      return await{ self.edit_limit_order(id, symbol, 'buy', *args) }
     end
 
-    def edit_limit_sell_order(id, symbol, *args)
-      return self.edit_limit_order(id, symbol, 'sell', *args)
+    async def edit_limit_sell_order(id, symbol, *args)
+      return await{ self.edit_limit_order(id, symbol, 'sell', *args) }
     end
 
-    def edit_limit_order(id, symbol, *args)
-      return self.edit_order(id, symbol, 'limit', *args)
+    async def edit_limit_order(id, symbol, *args)
+      return await{ self.edit_order(id, symbol, 'limit', *args) }
     end
 
     def edit_order(id, symbol, *args)

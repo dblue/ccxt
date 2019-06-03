@@ -229,8 +229,8 @@ module Ccxt
       return self.decimal_to_precision(fee, TRUNCATE, self.markets[symbol]['precision']['amount'], DECIMAL_PLACES)
     end
 
-    def fetch_min_order_amounts
-      html = self.zendeskGet205893708WhatIsTheMinimumOrderSize
+    async def fetch_min_order_amounts
+      html = await{ self.zendeskGet205893708WhatIsTheMinimumOrderSize }
       parts = html.split('<td class="wysiwyg-text-align-right">')
       numParts = parts.length
       if numParts < 3
@@ -255,9 +255,9 @@ module Ccxt
       return result
     end
 
-    def fetch_markets(params = {})
-      markets = self.publicGetAssetPairs
-      limits = self.fetch_min_order_amounts
+    async def fetch_markets(params = {})
+      markets = await{ self.publicGetAssetPairs }
+      limits = await{ self.fetch_min_order_amounts }
       keys = markets['result'].keys
       result = []
       for i in (0...keys.length)
@@ -279,7 +279,7 @@ module Ccxt
         end
         base = self.common_currency_code(base)
         quote = self.common_currency_code(quote)
-        darkpool = id.index('.d')
+        darkpool = id.include?('.d')
         symbol = darkpool ? market['altname'] : (base + '/' + quote)
         maker = nil
         if market.include?('fees_maker')
@@ -348,13 +348,13 @@ module Ccxt
         # { 'id' => 'XXLMZEUR', 'symbol' => 'XLM/EUR', 'base' => 'XLM', 'quote' => 'EUR', 'altname' => 'XLMEUR' }
       ]
       for i in (0...markets.length)
-        result.push(shallow_extend(defaults, markets[i]))
+        result.push(self.shallow_extend(defaults, markets[i]))
       end
       return result
     end
 
-    def fetch_currencies(params = {})
-      response = self.publicGetAssets(params)
+    async def fetch_currencies(params = {})
+      response = await{ self.publicGetAssets(params) }
       #
       #     {
       #         "error" => [],
@@ -411,9 +411,9 @@ module Ccxt
     end
 
     def fetch_trading_fees(params = {})
-      self.load_markets
+      await{ self.load_markets }
       self.check_required_credentials
-      response = self.privatePostTradeVolume(params)
+      response = await{ self.privatePostTradeVolume(params) }
       tradedVolume = self.safe_float(response['result'], 'volume')
       tiers = self.fees['trading']['tiers']
       taker = tiers['taker'][1]
@@ -436,7 +436,7 @@ module Ccxt
     end
 
     def fetch_order_book(symbol, limit = nil, params = {})
-      self.load_markets
+      await{ self.load_markets }
       market = self.market(symbol)
       if market['darkpool']
         raise(ExchangeError, self.id + ' does not provide an order book for darkpool symbol ' + symbol)
@@ -447,7 +447,7 @@ module Ccxt
       if limit != nil
         request['count'] = limit
       end # 100
-      response = self.publicGetDepth(shallow_extend(request, params))
+      response = await{ self.publicGetDepth(self.shallow_extend(request, params)) }
       orderbook = response['result'][market['id']]
       return self.parse_order_book(orderbook)
     end
@@ -489,8 +489,8 @@ module Ccxt
       }
     end
 
-    def fetch_tickers(symbols = nil, params = {})
-      self.load_markets
+    async def fetch_tickers(symbols = nil, params = {})
+      await{ self.load_markets }
       pairs = []
       for s in (0...self.symbols.length)
         symbol = self.symbols[s]
@@ -502,9 +502,9 @@ module Ccxt
         end
       end
       filter = pairs.join(',')
-      response = self.publicGetTicker(shallow_extend({
+      response = await{ self.publicGetTicker(self.shallow_extend({
         'pair' => filter
-      }, params))
+      }, params)) }
       tickers = response['result']
       ids = tickers.keys
       result = {}
@@ -518,17 +518,18 @@ module Ccxt
       return result
     end
 
-    def fetch_ticker(symbol, params = {})
-      self.load_markets
-      darkpool = symbol.index('.d')
+    async def fetch_ticker(symbol, params = {})
+      await{ self.load_markets }
+      darkpool = symbol.include?('.d')
       if darkpool
         raise(ExchangeError, self.id + ' does not provide a ticker for darkpool symbol ' + symbol)
       end
       market = self.market(symbol)
-      response = self.publicGetTicker(shallow_extend({
+      response = await{ self.publicGetTicker(self.shallow_extend({
         'pair' => market['id']
-      }, params))
+      }, params))}
       ticker = response['result'][market['id']]
+      sleep(60)
       return self.parse_ticker(ticker, market)
     end
 
@@ -543,8 +544,8 @@ module Ccxt
       ]
     end
 
-    def fetch_ohlcv(symbol, timeframe = '1m', since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_ohlcv(symbol, timeframe = '1m', since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
       request = {
         'pair' => market['id'],
@@ -553,7 +554,7 @@ module Ccxt
       if since != nil
         request['since'] = ((since - 1).to_i / 1000)
       end
-      response = self.publicGetOHLC(shallow_extend(request, params))
+      response = await{ self.publicGetOHLC(self.shallow_extend(request, params)) }
       ohlcvs = response['result'][market['id']]
       return self.parse_ohlcvs(ohlcvs, market, timeframe, since, limit)
     end
@@ -623,9 +624,9 @@ module Ccxt
       }
     end
 
-    def fetch_ledger(code = nil, since = nil, limit = nil, params = {})
+    async def fetch_ledger(code = nil, since = nil, limit = nil, params = {})
       # https://www.kraken.com/features/api#get-ledgers-info
-      self.load_markets
+      await{ self.load_markets }
       request = {}
       currency = nil
       if code != nil
@@ -635,7 +636,7 @@ module Ccxt
       if since != nil
         request['start'] = (since / 1000).to_i
       end
-      response = self.privatePostLedgers(shallow_extend(request, params))
+      response = await{ self.privatePostLedgers(self.shallow_extend(request, params)) }
       # {  error => [],
       #   result => { ledger => { 'LPUAIB-TS774-UKHP7X' => {   refid => "A2B4HBV-L4MDIE-JU4N3N",
       #                                                   time =>  1520103488.314,
@@ -658,14 +659,14 @@ module Ccxt
       return self.parse_ledger(items, currency, since, limit)
     end
 
-    def fetch_ledger_entries_by_ids(ids, code = nil, params = {})
+    async def fetch_ledger_entries_by_ids(ids, code = nil, params = {})
       # https://www.kraken.com/features/api#query-ledgers
-      self.load_markets
+      await{ self.load_markets }
       ids = ids.join(',')
-      request = shallow_extend({
+      request = self.shallow_extend({
         'id' => ids
       }, params)
-      response = self.privatePostQueryLedgers(request)
+      response = await{ self.privatePostQueryLedgers(request) }
       # {  error => [],
       #   result => { 'LPUAIB-TS774-UKHP7X' => {   refid => "A2B4HBV-L4MDIE-JU4N3N",
       #                                         time =>  1520103488.314,
@@ -687,8 +688,8 @@ module Ccxt
       return self.parse_ledger(items)
     end
 
-    def fetch_ledger_entry(id, code = nil, params = {})
-      items = self.fetchLedgerEntrysByIds([id], code, params)
+    async def fetch_ledger_entry(id, code = nil, params = {})
+      items = await{ self.fetchLedgerEntrysByIds([id], code, params) }
       return items[0]
     end
 
@@ -758,13 +759,13 @@ module Ccxt
       }
     end
 
-    def fetch_trades(symbol, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_trades(symbol, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
       id = market['id']
-      response = self.publicGetTrades(shallow_extend({
+      response = await{ self.publicGetTrades(self.shallow_extend({
         'pair' => id
-      }, params))
+      }, params))}
       #
       #     {
       #         "error" => [],
@@ -789,9 +790,9 @@ module Ccxt
       return self.parse_trades(trades, market, since, limit)
     end
 
-    def fetch_balance(params = {})
-      self.load_markets
-      response = self.privatePostBalance(params)
+    async def fetch_balance(params = {})
+      await{ self.load_markets }
+      response = await{ self.privatePostBalance(params) }
       balances = self.safe_value(response, 'result')
       if balances.nil?
         raise(ExchangeNotAvailable, self.id + ' fetchBalance failed due to a malformed response ' + self.json(response))
@@ -823,8 +824,8 @@ module Ccxt
       return self.parse_balance(result)
     end
 
-    def create_order(symbol, type, side, amount, price = nil, params = {})
-      self.load_markets
+    async def create_order(symbol, type, side, amount, price = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
       order = {
         'pair' => market['id'],
@@ -839,7 +840,7 @@ module Ccxt
       if shouldIncludePrice
         order['price'] = self.price_to_precision(symbol, price)
       end
-      response = self.privatePostAddOrder(shallow_extend(order, params))
+      response = await{ self.privatePostAddOrder(self.shallow_extend(order, params)) }
       id = self.safe_value(response['result'], 'txid')
       if id != nil
         if id.is_a?(Array)
@@ -973,9 +974,9 @@ module Ccxt
             'cost' => feeCost,
             'rate' => nil
           }
-          if flags.index('fciq')
+          if flags.include?('fciq')
             fee['currency'] = market['quote']
-          elsif flags.index('fcib')
+          elsif flags.include?('fcib')
             fee['currency'] = market['base']
           end
         end
@@ -1007,44 +1008,44 @@ module Ccxt
       ids = orders.keys
       for i in (0...ids.length)
         id = ids[i]
-        order = shallow_extend({ 'id' => id }, orders[id])
+        order = self.shallow_extend({ 'id' => id }, orders[id])
         result.push(self.parse_order(order, market))
       end
       return self.filter_by_since_limit(result, since, limit)
     end
 
-    def fetch_order(id, symbol = nil, params = {})
-      self.load_markets
-      response = self.privatePostQueryOrders(shallow_extend({
+    async def fetch_order(id, symbol = nil, params = {})
+      await{ self.load_markets }
+      response = await{ self.privatePostQueryOrders(self.shallow_extend({
         'trades' => true, # whether or not to include trades in output(optional, default false)
         'txid' => id, # do not comma separate a list of ids - use fetchOrdersByIds instead
         # 'userref' => 'optional', # restrict results to given user reference id(optional)
-      }, params))
+      }, params))}
       orders = response['result']
-      order = self.parse_order(shallow_extend({ 'id' => id }, orders[id]))
-      return shallow_extend({ 'info' => response }, order)
+      order = self.parse_order(self.shallow_extend({ 'id' => id }, orders[id]))
+      return self.shallow_extend({ 'info' => response }, order)
     end
 
-    def fetch_orders_by_ids(ids, symbol = nil, params = {})
-      self.load_markets
-      response = self.privatePostQueryOrders(shallow_extend({
+    async def fetch_orders_by_ids(ids, symbol = nil, params = {})
+      await{ self.load_markets }
+      response = await{ self.privatePostQueryOrders(self.shallow_extend({
         'trades' => true, # whether or not to include trades in output(optional, default false)
         'txid' => ids.join(','), # comma delimited list of transaction ids to query info about(20 maximum)
-      }, params))
+      }, params))}
       result = self.safe_value(response, 'result', {})
       orders = []
       orderIds = result.keys
       for i in (0...orderIds.length)
         id = orderIds[i]
         item = result[id]
-        order = self.parse_order(shallow_extend({ 'id' => id }, item))
+        order = self.parse_order(self.shallow_extend({ 'id' => id }, item))
         orders.push(order)
       end
       return orders
     end
 
-    def fetch_my_trades(symbol = nil, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_my_trades(symbol = nil, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       request = {
         # 'type' => 'all', # any position, closed position, closing position, no position
         # 'trades' => false, # whether or not to include trades related to position in output
@@ -1055,7 +1056,7 @@ module Ccxt
       if since != nil
         request['start'] = (since / 1000).to_i
       end
-      response = self.privatePostTradesHistory(shallow_extend(request, params))
+      response = await{ self.privatePostTradesHistory(self.shallow_extend(request, params)) }
       #
       #     {
       #         "error" => [],
@@ -1093,16 +1094,16 @@ module Ccxt
       return self.filter_by_symbol(result, symbol)
     end
 
-    def cancel_order(id, symbol = nil, params = {})
-      self.load_markets
+    async def cancel_order(id, symbol = nil, params = {})
+      await{ self.load_markets }
       response = nil
       begin
-        response = self.privatePostCancelOrder(shallow_extend({
+        response = await{ self.privatePostCancelOrder(self.shallow_extend({
           'txid' => id
-        }, params))
+        }, params))}
       rescue BaseError => e
         if self.last_http_response
-          if self.last_http_response.index('EOrder:Unknown order')
+          if self.last_http_response.include?('EOrder:Unknown order')
             raise(OrderNotFound, self.id + ' cancelOrder error ' + self.last_http_response)
           end
         end
@@ -1111,13 +1112,13 @@ module Ccxt
       return response
     end
 
-    def fetch_open_orders(symbol = nil, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_open_orders(symbol = nil, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       request = {}
       if since != nil
         request['start'] = (since / 1000).to_i
       end
-      response = self.privatePostOpenOrders(shallow_extend(request, params))
+      response = await{ self.privatePostOpenOrders(self.shallow_extend(request, params))}
       orders = self.parse_orders(response['result']['open'], nil, since, limit)
       if symbol.nil?
         return orders
@@ -1125,13 +1126,13 @@ module Ccxt
       return self.filter_by_symbol(orders, symbol)
     end
 
-    def fetch_closed_orders(symbol = nil, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_closed_orders(symbol = nil, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       request = {}
       if since != nil
         request['start'] = (since / 1000).to_i
       end
-      response = self.privatePostClosedOrders(shallow_extend(request, params))
+      response = await{ self.privatePostClosedOrders(self.shallow_extend(request, params))}
       orders = self.parse_orders(response['result']['closed'], nil, since, limit)
       if symbol.nil?
         return orders
@@ -1139,12 +1140,12 @@ module Ccxt
       return self.filter_by_symbol(orders, symbol)
     end
 
-    def fetch_deposit_methods(code, params = {})
-      self.load_markets
+    async def fetch_deposit_methods(code, params = {})
+      await{ self.load_markets }
       currency = self.currency(code)
-      response = self.privatePostDepositMethods(shallow_extend({
+      response = await{ self.privatePostDepositMethods(self.shallow_extend({
         'asset' => currency['id']
-      }, params))
+      }, params))}
       return response['result']
     end
 
@@ -1236,7 +1237,7 @@ module Ccxt
     def parse_transactions_by_type(type, transactions, code = nil, since = nil, limit = nil)
       result = []
       for i in (0...transactions.length)
-        transaction = self.parse_transaction(shallow_extend({
+        transaction = self.parse_transaction(self.shallow_extend({
           'type' => type
         }, transactions[i]))
         result.push(transaction)
@@ -1244,8 +1245,8 @@ module Ccxt
       return self.filterByCurrencySinceLimit(result, code, since, limit)
     end
 
-    def fetch_deposits(code = nil, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_deposits(code = nil, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       # https://www.kraken.com/en-us/help/api#deposit-status
       if code.nil?
         raise(ArgumentsRequired, self.id + ' fetchDeposits requires a currency code argument')
@@ -1254,7 +1255,7 @@ module Ccxt
       request = {
         'asset' => currency['id']
       }
-      response = self.privatePostDepositStatus(shallow_extend(request, params))
+      response = await{ self.privatePostDepositStatus(self.shallow_extend(request, params))}
       #
       #     {  error => [],
       #       result => [{ method => "Ether(Hex)",
@@ -1271,8 +1272,8 @@ module Ccxt
       return self.parse_transactions_by_type('deposit', response['result'], code, since, limit)
     end
 
-    def fetch_withdrawals(code = nil, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_withdrawals(code = nil, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       # https://www.kraken.com/en-us/help/api#withdraw-status
       if code.nil?
         raise(ArgumentsRequired, self.id + ' fetchWithdrawals requires a currency code argument')
@@ -1281,7 +1282,7 @@ module Ccxt
       request = {
         'asset' => currency['id']
       }
-      response = self.privatePostWithdrawStatus(shallow_extend(request, params))
+      response = await{ self.privatePostWithdrawStatus(self.shallow_extend(request, params)) }
       #
       #     {  error => [],
       #       result => [{ method => "Ether",
@@ -1298,11 +1299,11 @@ module Ccxt
       return self.parse_transactions_by_type('withdrawal', response['result'], code, since, limit)
     end
 
-    def create_deposit_address(code, params = {})
+    async def create_deposit_address(code, params = {})
       request = {
         'new' => 'true'
       }
-      response = self.fetch_deposit_address(code, shallow_extend(request, params))
+      response = await{ self.fetch_deposit_address(code, self.shallow_extend(request, params)) }
       address = self.safe_string(response, 'address')
       self.check_address(address)
       return {
@@ -1312,8 +1313,8 @@ module Ccxt
       }
     end
 
-    def fetch_deposit_address(code, params = {})
-      self.load_markets
+    async def fetch_deposit_address(code, params = {})
+      await{ self.load_markets }
       currency = self.currency(code)
       # eslint-disable-next-line quotes
       method = self.safe_string(params, 'method')
@@ -1332,7 +1333,7 @@ module Ccxt
         'asset' => currency['id'],
         'method' => method
       }
-      response = self.privatePostDepositAddresses(shallow_extend(request, params)) # overwrite methods
+      response = await{ self.privatePostDepositAddresses(self.shallow_extend(request, params))} # overwrite methods
       result = response['result']
       numResults = result.length
       if numResults < 1
@@ -1349,16 +1350,16 @@ module Ccxt
       }
     end
 
-    def withdraw(code, amount, address, tag = nil, params = {})
+    async def withdraw(code, amount, address, tag = nil, params = {})
       self.check_address(address)
       if params.include?('key')
-        self.load_markets
+        await{ self.load_markets }
         currency = self.currency(code)
-        response = self.privatePostWithdraw(shallow_extend({
+        response = await{ self.privatePostWithdraw(self.shallow_extend({
           'asset' => currency['id'],
           'amount' => amount,
           # 'address' => address, # they don't allow withdrawals to direct addresses
-        }, params))
+        }, params))}
         return {
           'info' => response,
           'id' => response['result']
@@ -1371,18 +1372,19 @@ module Ccxt
       url = '/' + self.version + '/' + api + '/' + path
       if api == 'public'
         if params
+          puts "kraken#sign: params detected in public... adding '?'"
           url += '?' + self.urlencode(params)
         end
       elsif api == 'private'
         self.check_required_credentials
         nonce = self.nonce.to_s
-        body = self.urlencode(shallow_extend({ 'nonce' => nonce }, params))
+        body = self.urlencode(self.shallow_extend({ 'nonce' => nonce }, params))
         auth = self.encode(nonce + body)
         hash = self.hash(auth, 'sha256', 'binary')
         binary = self.encode(url)
         binhash = self.binary_concat(binary, hash)
         secret = Base64.decode64(self.secret)
-        signature = self.hmac(binhash, secret, sha512, 'base64')
+        signature = self.hmac(binhash, secret, 'sha512', 'base64')
         headers = {
           'API-Key' => self.apiKey,
           'API-Sign' => self.decode(signature),
@@ -1403,19 +1405,19 @@ module Ccxt
       if code == 520
         raise(ExchangeNotAvailable, self.id + ' ' + code.to_s + ' ' + reason)
       end
-      if body.index('Invalid order')
+      if body.include?('Invalid order')
         raise(InvalidOrder, self.id + ' ' + body)
       end
-      if body.index('Invalid nonce')
+      if body.include?('Invalid nonce')
         raise(InvalidNonce, self.id + ' ' + body)
       end
-      if body.index('Insufficient funds')
+      if body.include?('Insufficient funds')
         raise(InsufficientFunds, self.id + ' ' + body)
       end
-      if body.index('Cancel pending')
+      if body.include?('Cancel pending')
         raise(CancelPending, self.id + ' ' + body)
       end
-      if body.index('Invalid arguments:volume')
+      if body.include?('Invalid arguments:volume')
         raise(InvalidOrder, self.id + ' ' + body)
       end
       if body[0] == '{'

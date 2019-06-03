@@ -1,3 +1,5 @@
+require 'uri/query_params'
+
 module Ccxt::ExchangeHelpers
   def self.included(base)
     base.send :include, ClassMethods
@@ -349,8 +351,9 @@ module Ccxt::ExchangeHelpers
     def url(path, params = {})
       result = implode_params(path, params)
       query = omit(params, extract_params(path))
+      puts "Query: #{query}" if self.verbose
       if query
-        result += '?' + RestClient::Utils.encode_query_string(query)
+        result += '?' + URI::QueryParams.dump(query)
       end
       return result
     end
@@ -359,8 +362,10 @@ module Ccxt::ExchangeHelpers
     # Encode a query for a URL, encoding special characters as necessary.
     #
     def urlencode(params = {})
+      puts "params: #{params}" if self.verbose
       if params.is_a?(Hash)
-        return RestClient::Utils.encode_query_string(params)
+        puts "URI::QueryParams: #{URI::QueryParams.dump(params)}"
+        return URI::QueryParams.dump(params)
       else
         return params
       end
