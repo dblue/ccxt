@@ -3,7 +3,7 @@ require 'async'
 require 'async/await'
 require 'async/http'
 require 'async/http/internet'
-# require 'rest-client'
+require 'rest-client'
 require 'json'
 require 'base64'
 require 'securerandom'
@@ -15,6 +15,7 @@ require 'ccxt/base/errors'
 require 'ccxt/base/decimal_to_precision'
 require 'ccxt/base/exchange_helpers'
 require 'eth'
+require 'ccxt/base/throttle'
 
 module Ccxt
   # base class for the exchange
@@ -218,6 +219,7 @@ module Ccxt
         'capacity' => 1.0,
         'defaultCost' => 1.0
       }
+      @throttle_function = Throttle.new(self.tokenBucket)
     end
 
     def describe
@@ -261,7 +263,7 @@ module Ccxt
       end
       puts 'load_markets: loading markets.' if verbose
       currencies = await{ fetch_currencies } if has['fetchCurrencies']
-      markets = await {self.fetch_markets(params)}
+      markets = await{ self.fetch_markets(params) }
       return set_markets(markets, currencies)
     end
 
@@ -688,7 +690,8 @@ module Ccxt
         end
       end
       headers.update({ 'Origin' => self.origin }) unless self.proxy.empty?
-      headers.update({ 'Accept-Encoding' => 'gzip, deflate' })
+      # headers.update({ 'Accept-Encoding' => 'gzip, deflate' })
+      headers.update({ 'Accept-Encoding' => 'deflate' })
       headers
     end
 
@@ -702,7 +705,7 @@ module Ccxt
     end
 
     async def fetch2(path, api = 'public', method = 'GET', params = {}, headers = nil, body = nil)
-      await{ throttle } if enableRateLimit
+      @throttle_function.throttle if enableRateLimit
       self.lastRestRequestTimestamp = milliseconds
       puts "path: #{path}" if self.verbose
       puts "params: #{params.inspect}" if self.verbose
@@ -720,23 +723,20 @@ module Ccxt
       response = nil
       http_response = nil
       json_response = nil
-      begin
+      Async do
         internet = Async::HTTP::Internet.new
-        response = internet.call(method.downcase, url, headers, payload).read
-        # response = RestClient::Request.execute(
-        #   method: method.downcase.to_sym,
-        #   url: url,
-        #   headers: request_headers,
-        #   payload: payload
-        # )
-        http_response = response.body
+        response = internet.call(method, url, request_headers.to_a, '')
+        
+        puts "Reading response status=#{response.status}..."
+	
+        http_response = response.read
         json_response = is_json_encoded_object(http_response) ? JSON.parse(http_response) : nil
         headers = response.headers
 
         self.last_http_response = http_response if self.enableLastHttpResponse
         self.last_json_response = json_response if self.enableLastJsonResponse
         self.last_response_headers = headers if self.enableLastResponseHeaders
-        puts "\nResponse:\nmethod: #{method.inspect}\nurl: #{url.inspect}\nstatus: #{response.code.inspect}\nheaders: #{headers.inspect}\nhttp_response: #{http_response}" if self.verbose
+        puts "\nResponse:\nmethod: #{method.inspect}\nurl: #{url.inspect}\nstatus: #{response.status.inspect}\nheaders: #{headers.inspect}\nhttp_response: #{http_response}" if self.verbose
 
         # rescue Timeout
         #    except Timeout as e:
@@ -766,14 +766,14 @@ module Ccxt
         #        else:
         #            self.raise_error(ExchangeError, url, method, e)
         #
-      rescue StandardError => e
-        raise e, response.inspect
-        return e
+      # rescue StandardError => e
+      #   raise e, response.inspect
+      #   return e
       ensure
         internet.close
-      end
+      end.wait
 
-      handle_errors(response.code, response.body, url, method, headers, http_response, json_response)
+      handle_errors(response.status, response.body, url, method, headers, http_response, json_response)
       handle_rest_response(http_response, json_response, url, method, headers, payload)
       if json_response != nil
         return json_response
@@ -806,7 +806,7 @@ module Ccxt
     end
 
     # request is the main function for define_rest_api()
-    def request(path, api = 'public', method = 'GET', params = {}, headers = nil, body = nil)
+    async def request(path, api = 'public', method = 'GET', params = {}, headers = nil, body = nil)
       return await{ fetch2(path, api, method, params, headers, body) }
     end
 

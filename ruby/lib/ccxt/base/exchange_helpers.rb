@@ -351,9 +351,8 @@ module Ccxt::ExchangeHelpers
     def url(path, params = {})
       result = implode_params(path, params)
       query = omit(params, extract_params(path))
-      puts "Query: #{query}" if self.verbose
       if query
-        result += '?' + URI::QueryParams.dump(query)
+        result1 += '?' + URI::QueryParams.dump(query)
       end
       return result
     end
@@ -362,9 +361,7 @@ module Ccxt::ExchangeHelpers
     # Encode a query for a URL, encoding special characters as necessary.
     #
     def urlencode(params = {})
-      puts "params: #{params}" if self.verbose
       if params.is_a?(Hash)
-        puts "URI::QueryParams: #{URI::QueryParams.dump(params)}"
         return URI::QueryParams.dump(params)
       else
         return params

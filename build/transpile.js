@@ -401,6 +401,7 @@ const rubyRegexes = [
     [ /this\.stringToBase64\s/g, 'Base64.encode64' ],
     [ /this\.base64ToBinary\s/g, 'Base64.decode64' ],
     [ /\.shift\s*\(\)/g, '.pop(0)' ],
+    [ /(\s)continue(\s)/g, '$1next$2']
 //    [ /this\.extend/g, 'array_merge' ],
 //    [ /this\.extend\s*\(\s*(.*)\s*,\s*(.*)\)/g, '.shallow_extend($1, $2)'],
 
@@ -437,6 +438,8 @@ const rubyRegexes = [
     [ /\.push\s*\(([\s\S]+?)\);/g, '.push($1)' ],
     [ /^(\s*)(}\s*$)+/gm, '$1end' ],
     [ /^(\s*)}\s*\/\/(.*)$/gm, '$1end #$2'],
+  //  [ /(\s)await(\s)(.*?);$/g, '$1await1{ $3 }' ], // single line await
+    [ /(\s)await(\s)([^]*?)\);/gm, '$1await{ $3) }' ], // multiline await
     [ /;/g, '' ],
     [ /\.toUpperCase\s*\(\)/g, '.upcase' ],
     [ /\.toLowerCase\s*\(\)/g, '.downcase' ],
@@ -475,7 +478,6 @@ const rubyRegexes = [
     // [ /([^\s]+) \}/g, '$1}' ],    // PEP8 E202 remove whitespaces before right } bracket
     [ /([^a-z])(elsif|if|or|else|in)\(/g, '$1$2 \(' ], // a correction for PEP8 E225 side-effect for compound and ternary conditionals
     [ /([\S])\: /g, '$1 => ' ],
-    [ /(\s)await(\s)/g, '$1' ],
       // [ /\(\)/g, '' ], // Method calls with no arguments. NOTE: Clean this up after camel-casing method names.
     [ /,(\s*)(\}|\])/gm, '$1$2' ] // comma after last item in hash or array
 ])
@@ -868,7 +870,7 @@ function transpileDerivedExchangeClass (contents) {
         // compile signature + body for Ruby
         let rubyString = 'def ' + method + (rubyArgs.length ? '(' + rubyArgs + ')': '')
         ruby.push ('');
-        ruby.push ('    ' + rubyString);
+        ruby.push ('    ' + keyword + rubyString);
         ruby.push (rubyBody);
         ruby.push ('    end');
     }
