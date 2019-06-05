@@ -410,7 +410,7 @@ module Ccxt
       return result
     end
 
-    def fetch_trading_fees(params = {})
+    async def fetch_trading_fees(params = {})
       await{ self.load_markets }
       self.check_required_credentials
       response = await{ self.privatePostTradeVolume(params) }
@@ -435,7 +435,7 @@ module Ccxt
       }
     end
 
-    def fetch_order_book(symbol, limit = nil, params = {})
+    async def fetch_order_book(symbol, limit = nil, params = {})
       await{ self.load_markets }
       market = self.market(symbol)
       if market['darkpool']
@@ -527,9 +527,8 @@ module Ccxt
       market = self.market(symbol)
       response = await{ self.publicGetTicker(self.shallow_extend({
         'pair' => market['id']
-      }, params))}
+      }, params)) }
       ticker = response['result'][market['id']]
-      sleep(60)
       return self.parse_ticker(ticker, market)
     end
 
@@ -765,7 +764,7 @@ module Ccxt
       id = market['id']
       response = await{ self.publicGetTrades(self.shallow_extend({
         'pair' => id
-      }, params))}
+      }, params)) }
       #
       #     {
       #         "error" => [],
@@ -1020,7 +1019,7 @@ module Ccxt
         'trades' => true, # whether or not to include trades in output(optional, default false)
         'txid' => id, # do not comma separate a list of ids - use fetchOrdersByIds instead
         # 'userref' => 'optional', # restrict results to given user reference id(optional)
-      }, params))}
+      }, params)) }
       orders = response['result']
       order = self.parse_order(self.shallow_extend({ 'id' => id }, orders[id]))
       return self.shallow_extend({ 'info' => response }, order)
@@ -1031,7 +1030,7 @@ module Ccxt
       response = await{ self.privatePostQueryOrders(self.shallow_extend({
         'trades' => true, # whether or not to include trades in output(optional, default false)
         'txid' => ids.join(','), # comma delimited list of transaction ids to query info about(20 maximum)
-      }, params))}
+      }, params)) }
       result = self.safe_value(response, 'result', {})
       orders = []
       orderIds = result.keys
@@ -1100,7 +1099,7 @@ module Ccxt
       begin
         response = await{ self.privatePostCancelOrder(self.shallow_extend({
           'txid' => id
-        }, params))}
+        }, params)) }
       rescue BaseError => e
         if self.last_http_response
           if self.last_http_response.include?('EOrder:Unknown order')
@@ -1118,7 +1117,7 @@ module Ccxt
       if since != nil
         request['start'] = (since / 1000).to_i
       end
-      response = await{ self.privatePostOpenOrders(self.shallow_extend(request, params))}
+      response = await{ self.privatePostOpenOrders(self.shallow_extend(request, params)) }
       orders = self.parse_orders(response['result']['open'], nil, since, limit)
       if symbol.nil?
         return orders
@@ -1132,7 +1131,7 @@ module Ccxt
       if since != nil
         request['start'] = (since / 1000).to_i
       end
-      response = await{ self.privatePostClosedOrders(self.shallow_extend(request, params))}
+      response = await{ self.privatePostClosedOrders(self.shallow_extend(request, params)) }
       orders = self.parse_orders(response['result']['closed'], nil, since, limit)
       if symbol.nil?
         return orders
@@ -1145,7 +1144,7 @@ module Ccxt
       currency = self.currency(code)
       response = await{ self.privatePostDepositMethods(self.shallow_extend({
         'asset' => currency['id']
-      }, params))}
+      }, params)) }
       return response['result']
     end
 
@@ -1255,7 +1254,7 @@ module Ccxt
       request = {
         'asset' => currency['id']
       }
-      response = await{ self.privatePostDepositStatus(self.shallow_extend(request, params))}
+      response = await{ self.privatePostDepositStatus(self.shallow_extend(request, params)) }
       #
       #     {  error => [],
       #       result => [{ method => "Ether(Hex)",
@@ -1322,7 +1321,7 @@ module Ccxt
         if self.options['cacheDepositMethodsOnFetchDepositAddress']
           # cache depositMethods
           if self.options['depositMethods'].include?(!(code))
-            self.options['depositMethods'][code] = self.fetch_deposit_methods(code)
+            self.options['depositMethods'][code] = await{ self.fetch_deposit_methods(code) }
           end
           method = self.options['depositMethods'][code][0]['method']
         else
@@ -1333,7 +1332,7 @@ module Ccxt
         'asset' => currency['id'],
         'method' => method
       }
-      response = await{ self.privatePostDepositAddresses(self.shallow_extend(request, params))} # overwrite methods
+      response = await{ self.privatePostDepositAddresses(self.shallow_extend(request, params)) } # overwrite methods
       result = response['result']
       numResults = result.length
       if numResults < 1
@@ -1359,7 +1358,7 @@ module Ccxt
           'asset' => currency['id'],
           'amount' => amount,
           # 'address' => address, # they don't allow withdrawals to direct addresses
-        }, params))}
+        }, params)) }
         return {
           'info' => response,
           'id' => response['result']
@@ -1372,7 +1371,6 @@ module Ccxt
       url = '/' + self.version + '/' + api + '/' + path
       if api == 'public'
         if params
-          puts "kraken#sign: params detected in public... adding '?'"
           url += '?' + self.urlencode(params)
         end
       elsif api == 'private'
