@@ -25,7 +25,7 @@ module Ccxt
     end
     
     async def run
-      puts "throttle#run: Entering throttle"
+      # puts "throttle#run: Entering throttle"
       if !settings['running']
         settings['running'] = true
 
@@ -38,8 +38,8 @@ module Ccxt
           if settings['numTokens'] > 0
             cost = queue.shift
             settings['numTokens'] -= cost ? cost : settings['defaultCost']
-            puts " * Cost is #{cost.inspect}."
-            puts " * numTokens is #{settings['numTokens']}."
+            # puts " * Cost is #{cost.inspect}."
+#             puts " * numTokens is #{settings['numTokens']}."
           end
           # puts " - Waiting for #{settings['delay']} seconds because I only have #{settings['numTokens']}."
           Async {|task| task.sleep(settings['delay'])}
@@ -50,7 +50,6 @@ module Ccxt
 
     def throttle(cost=nil)
       queue.push( cost )
-      puts "Enqueuing #{cost}..."
       return run
     end
   end
