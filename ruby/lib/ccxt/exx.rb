@@ -89,8 +89,8 @@ module Ccxt
       })
     end
 
-    def fetch_markets(params = {})
-      markets = self.publicGetMarkets
+    async def fetch_markets(params = {})
+      markets = await{ self.publicGetMarkets }
       ids = markets.keys
       result = []
       for i in (0...ids.length)
@@ -165,25 +165,25 @@ module Ccxt
       }
     end
 
-    def fetch_ticker(symbol, params = {})
-      self.load_markets
+    async def fetch_ticker(symbol, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
-      ticker = self.publicGetTicker(shallow_extend({
+      ticker = await{ self.publicGetTicker(self.shallow_extend({
         'currency' => market['id']
-      }, params))
+      }, params)) }
       return self.parse_ticker(ticker, market)
     end
 
-    def fetch_tickers(symbols = nil, params = {})
-      self.load_markets
-      tickers = self.publicGetTickers(params)
+    async def fetch_tickers(symbols = nil, params = {})
+      await{ self.load_markets }
+      tickers = await{ self.publicGetTickers(params) }
       result = {}
       timestamp = self.milliseconds
       ids = tickers.keys
       for i in (0...ids.length)
         id = ids[i]
         if self.marketsById.include?(!(id))
-          continue
+          next$2
         end
         market = self.marketsById[id]
         symbol = market['symbol']
@@ -196,11 +196,11 @@ module Ccxt
       return result
     end
 
-    def fetch_order_book(symbol, limit = nil, params = {})
-      self.load_markets
-      orderbook = self.publicGetDepth(shallow_extend({
+    async def fetch_order_book(symbol, limit = nil, params = {})
+      await{ self.load_markets }
+      orderbook = await{ self.publicGetDepth(self.shallow_extend({
         'currency' => self.market_id(symbol)
-      }, params))
+      }, params)) }
       return self.parse_order_book(orderbook, orderbook['timestamp'])
     end
 
@@ -226,18 +226,18 @@ module Ccxt
       }
     end
 
-    def fetch_trades(symbol, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_trades(symbol, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
-      trades = self.publicGetTrades(shallow_extend({
+      trades = await{ self.publicGetTrades(self.shallow_extend({
         'currency' => market['id']
-      }, params))
+      }, params)) }
       return self.parse_trades(trades, market, since, limit)
     end
 
-    def fetch_balance(params = {})
-      self.load_markets
-      balances = self.privateGetGetBalance(params)
+    async def fetch_balance(params = {})
+      await{ self.load_markets }
+      balances = await{ self.privateGetGetBalance(params) }
       result = { 'info' => balances }
       balances = balances['funds']
       currencies = balances.keys
@@ -298,15 +298,15 @@ module Ccxt
       }
     end
 
-    def create_order(symbol, type, side, amount, price = nil, params = {})
-      self.load_markets
+    async def create_order(symbol, type, side, amount, price = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
-      response = self.privateGetOrder(shallow_extend({
+      response = await{ self.privateGetOrder(self.shallow_extend({
         'currency' => market['id'],
         'type' => side,
         'price' => price,
         'amount' => amount
-      }, params))
+      }, params)) }
       id = response['id']
       order = self.parse_order({
         'id' => id,
@@ -320,32 +320,32 @@ module Ccxt
       return order
     end
 
-    def cancel_order(id, symbol = nil, params = {})
-      self.load_markets
+    async def cancel_order(id, symbol = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
-      result = self.privateGetCancel(shallow_extend({
+      result = await{ self.privateGetCancel(self.shallow_extend({
         'id' => id,
         'currency' => market['id']
-      }, params))
+      }, params)) }
       return result
     end
 
-    def fetch_order(id, symbol = nil, params = {})
-      self.load_markets
+    async def fetch_order(id, symbol = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
-      order = self.privateGetGetOrder(shallow_extend({
+      order = await{ self.privateGetGetOrder(self.shallow_extend({
         'id' => id,
         'currency' => market['id']
-      }, params))
+      }, params)) }
       return self.parse_order(order, market)
     end
 
-    def fetch_open_orders(symbol = nil, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_open_orders(symbol = nil, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
-      orders = self.privateGetGetOpenOrders(shallow_extend({
+      orders = await{ self.privateGetGetOpenOrders(self.shallow_extend({
         'currency' => market['id']
-      }, params))
+      }, params)) }
       if !orders.is_a?(Array)
         return []
       end
@@ -364,11 +364,11 @@ module Ccxt
         end
       else
         self.check_required_credentials
-        query = self.urlencode(self.keysort(shallow_extend({
+        query = self.urlencode(self.keysort(self.shallow_extend({
           'accesskey' => self.apiKey,
           'nonce' => self.nonce
         }, params)))
-        signed = self.hmac(self.encode(query), self.encode(self.secret), sha512)
+        signed = self.hmac(self.encode(query), self.encode(self.secret), 'sha512')
         url += '?' + query + '&signature=' + signed
         headers = {
           'Content-Type' => 'application/x-www-form-urlencoded'

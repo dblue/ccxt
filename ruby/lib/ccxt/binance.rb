@@ -186,17 +186,17 @@ module Ccxt
       return self.milliseconds - self.options['timeDifference']
     end
 
-    def load_time_difference
-      response = self.publicGetTime
+    async def load_time_difference
+      response = await{ self.publicGetTime }
       after = self.milliseconds
       self.options['timeDifference'] = (after - response['serverTime']).to_i
       return self.options['timeDifference']
     end
 
-    def fetch_markets(params = {})
-      response = self.publicGetExchangeInfo
+    async def fetch_markets(params = {})
+      response = await{ self.publicGetExchangeInfo }
       if self.options['adjustForTimeDifference']
-        self.load_time_difference
+        await{ self.load_time_difference }
       end
       markets = response['symbols']
       result = []
@@ -205,7 +205,7 @@ module Ccxt
         id = market['symbol']
         # "123456" is a "test symbol/market"
         if id == '123456'
-          continue
+          next$2
         end
         baseId = market['baseAsset']
         quoteId = market['quoteAsset']
@@ -298,9 +298,9 @@ module Ccxt
       }
     end
 
-    def fetch_balance(params = {})
-      self.load_markets
-      response = self.privateGetAccount(params)
+    async def fetch_balance(params = {})
+      await{ self.load_markets }
+      response = await{ self.privateGetAccount(params) }
       result = { 'info' => response }
       balances = response['balances']
       for i in (0...balances.length)
@@ -320,8 +320,8 @@ module Ccxt
       return self.parse_balance(result)
     end
 
-    def fetch_order_book(symbol, limit = nil, params = {})
-      self.load_markets
+    async def fetch_order_book(symbol, limit = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
       request = {
         'symbol' => market['id']
@@ -329,7 +329,7 @@ module Ccxt
       if limit != nil
         request['limit'] = limit
       end # default = maximum = 100
-      response = self.publicGetDepth(shallow_extend(request, params))
+      response = await{ self.publicGetDepth(self.shallow_extend(request, params)) }
       orderbook = self.parse_order_book(response)
       orderbook['nonce'] = self.safe_integer(response, 'lastUpdateId')
       return orderbook
@@ -363,12 +363,12 @@ module Ccxt
       }
     end
 
-    def fetch_ticker(symbol, params = {})
-      self.load_markets
+    async def fetch_ticker(symbol, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
-      response = self.publicGetTicker24hr(shallow_extend({
+      response = await{ self.publicGetTicker24hr(self.shallow_extend({
         'symbol' => market['id']
-      }, params))
+      }, params)) }
       return self.parse_ticker(response, market)
     end
 
@@ -380,16 +380,16 @@ module Ccxt
       return self.filter_by_array(tickers, 'symbol', symbols)
     end
 
-    def fetch_bids_asks(symbols = nil, params = {})
-      self.load_markets
-      rawTickers = self.publicGetTickerBookTicker(params)
+    async def fetch_bids_asks(symbols = nil, params = {})
+      await{ self.load_markets }
+      rawTickers = await{ self.publicGetTickerBookTicker(params) }
       return self.parse_tickers(rawTickers, symbols)
     end
 
-    def fetch_tickers(symbols = nil, params = {})
-      self.load_markets
+    async def fetch_tickers(symbols = nil, params = {})
+      await{ self.load_markets }
       method = self.options['fetchTickersMethod']
-      rawTickers = self.send_wrapper(method, params)
+      rawTickers = await{ self.send_wrapper(method, params) }
       return self.parse_tickers(rawTickers, symbols)
     end
 
@@ -404,8 +404,8 @@ module Ccxt
       ]
     end
 
-    def fetch_ohlcv(symbol, timeframe = '1m', since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_ohlcv(symbol, timeframe = '1m', since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
       request = {
         'symbol' => market['id'],
@@ -417,7 +417,7 @@ module Ccxt
       if limit != nil
         request['limit'] = limit # default == max == 500
       end
-      response = self.publicGetKlines(shallow_extend(request, params))
+      response = await{ self.publicGetKlines(self.shallow_extend(request, params)) }
       return self.parse_ohlcvs(response, market, timeframe, since, limit)
     end
 
@@ -521,8 +521,8 @@ module Ccxt
       }
     end
 
-    def fetch_trades(symbol, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_trades(symbol, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
       request = {
         'symbol' => market['id'],
@@ -550,7 +550,7 @@ module Ccxt
       #   which is different from actual trade id
       # - setting both fromId and time window results in error
       method = self.safe_value(self.options, 'fetchTradesMethod', 'publicGetTrades')
-      response = self.send_wrapper(method, shallow_extend(request, params))
+      response = await{ self.send_wrapper(method, self.shallow_extend(request, params)) }
       #
       # aggregate trades
       #
@@ -691,8 +691,8 @@ module Ccxt
       return result
     end
 
-    def create_order(symbol, type, side, amount, price = nil, params = {})
-      self.load_markets
+    async def create_order(symbol, type, side, amount, price = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
       # the next 5 lines are added to support for testing orders
       method = 'privatePostOrder'
@@ -743,15 +743,15 @@ module Ccxt
           order['stopPrice'] = self.price_to_precision(symbol, stopPrice)
         end
       end
-      response = self.send_wrapper(method, shallow_extend(order, params))
+      response = await{ self.send_wrapper(method, self.shallow_extend(order, params)) }
       return self.parse_order(response, market)
     end
 
-    def fetch_order(id, symbol = nil, params = {})
+    async def fetch_order(id, symbol = nil, params = {})
       if symbol.nil?
         raise(ArgumentsRequired, self.id + ' fetchOrder requires a symbol argument')
       end
-      self.load_markets
+      await{ self.load_markets }
       market = self.market(symbol)
       origClientOrderId = self.safe_value(params, 'origClientOrderId')
       request = {
@@ -762,15 +762,15 @@ module Ccxt
       else
         request['orderId'] = (id).to_i
       end
-      response = self.privateGetOrder(shallow_extend(request, params))
+      response = await{ self.privateGetOrder(self.shallow_extend(request, params)) }
       return self.parse_order(response, market)
     end
 
-    def fetch_orders(symbol = nil, since = nil, limit = nil, params = {})
+    async def fetch_orders(symbol = nil, since = nil, limit = nil, params = {})
       if symbol.nil?
         raise(ArgumentsRequired, self.id + ' fetchOrders requires a symbol argument')
       end
-      self.load_markets
+      await{ self.load_markets }
       market = self.market(symbol)
       request = {
         'symbol' => market['id']
@@ -781,7 +781,7 @@ module Ccxt
       if limit != nil
         request['limit'] = limit
       end
-      response = self.privateGetAllOrders(shallow_extend(request, params))
+      response = await{ self.privateGetAllOrders(self.shallow_extend(request, params)) }
       #
       #     [
       #         {
@@ -807,8 +807,8 @@ module Ccxt
       return self.parse_orders(response, market, since, limit)
     end
 
-    def fetch_open_orders(symbol = nil, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_open_orders(symbol = nil, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       market = nil
       request = {}
       if symbol != nil
@@ -820,34 +820,34 @@ module Ccxt
         fetchOpenOrdersRateLimit = (numSymbols / 2).to_i
         raise(ExchangeError, self.id + ' fetchOpenOrders WARNING => fetching open orders without specifying a symbol is rate-limited to one call per ' + fetchOpenOrdersRateLimit.to_s + ' seconds. Do not call self method frequently to avoid ban. Set ' + self.id + '.options["warnOnFetchOpenOrdersWithoutSymbol"] = false to suppress self warning message.')
       end
-      response = self.privateGetOpenOrders(shallow_extend(request, params))
+      response = await{ self.privateGetOpenOrders(self.shallow_extend(request, params)) }
       return self.parse_orders(response, market, since, limit)
     end
 
-    def fetch_closed_orders(symbol = nil, since = nil, limit = nil, params = {})
-      orders = self.fetch_orders(symbol, since, limit, params)
+    async def fetch_closed_orders(symbol = nil, since = nil, limit = nil, params = {})
+      orders = await{ self.fetch_orders(symbol, since, limit, params) }
       return self.filter_by(orders, 'status', 'closed')
     end
 
-    def cancel_order(id, symbol = nil, params = {})
+    async def cancel_order(id, symbol = nil, params = {})
       if symbol.nil?
         raise(ArgumentsRequired, self.id + ' cancelOrder requires a symbol argument')
       end
-      self.load_markets
+      await{ self.load_markets }
       market = self.market(symbol)
-      response = self.privateDeleteOrder(shallow_extend({
+      response = await{ self.privateDeleteOrder(self.shallow_extend({
         'symbol' => market['id'],
         'orderId' => (id).to_i,
         # 'origClientOrderId' => id
-      }, params))
+      }, params)) }
       return self.parse_order(response)
     end
 
-    def fetch_my_trades(symbol = nil, since = nil, limit = nil, params = {})
+    async def fetch_my_trades(symbol = nil, since = nil, limit = nil, params = {})
       if symbol.nil?
         raise(ArgumentsRequired, self.id + ' fetchMyTrades requires a symbol argument')
       end
-      self.load_markets
+      await{ self.load_markets }
       market = self.market(symbol)
       request = {
         'symbol' => market['id']
@@ -855,7 +855,7 @@ module Ccxt
       if limit != nil
         request['limit'] = limit
       end
-      response = self.privateGetMyTrades(shallow_extend(request, params))
+      response = await{ self.privateGetMyTrades(self.shallow_extend(request, params)) }
       #
       #     [
       #         {
@@ -876,16 +876,16 @@ module Ccxt
       return self.parse_trades(response, market, since, limit)
     end
 
-    def fetch_my_dust_trades(symbol = nil, since = nil, limit = nil, params = {})
+    async def fetch_my_dust_trades(symbol = nil, since = nil, limit = nil, params = {})
       #
       # Bianance provides an opportunity to trade insignificant(i.e. non-tradable and non-withdrawable)
       # token leftovers(of any asset) into `BNB` coin which in turn can be used to pay trading fees with it.
       # The corresponding trades history is called the `Dust Log` and can be requested via the following end-point:
       # https://github.com/binance-exchange/binance-official-api-docs/blob/master/wapi-api.md#dustlog-user_data
       #
-      self.load_markets
-      request = shallow_extend({}, params)
-      response = self.wapiGetUserAssetDribbletLog(request)
+      await{ self.load_markets }
+      request = self.shallow_extend({}, params)
+      response = await{ self.wapiGetUserAssetDribbletLog(request) }
       # { success =>    true,
       #   results => { total =>    1,
       #               rows => [{     transfered_total => "1.06468458",
@@ -978,8 +978,8 @@ module Ccxt
       }
     end
 
-    def fetch_deposits(code = nil, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_deposits(code = nil, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       currency = nil
       request = {}
       if code != nil
@@ -989,7 +989,7 @@ module Ccxt
       if since != nil
         request['startTime'] = since
       end
-      response = self.wapiGetDepositHistory(shallow_extend(request, params))
+      response = await{ self.wapiGetDepositHistory(self.shallow_extend(request, params)) }
       #
       #     {     success =>    true,
       #       depositList => [{ insertTime =>  1517425007000,
@@ -1003,8 +1003,8 @@ module Ccxt
       return self.parseTransactions(response['depositList'], currency, since, limit)
     end
 
-    def fetch_withdrawals(code = nil, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_withdrawals(code = nil, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       currency = nil
       request = {}
       if code != nil
@@ -1014,7 +1014,7 @@ module Ccxt
       if since != nil
         request['startTime'] = since
       end
-      response = self.wapiGetWithdrawHistory(shallow_extend(request, params))
+      response = await{ self.wapiGetWithdrawHistory(self.shallow_extend(request, params)) }
       #
       #     { withdrawList => [{      amount =>  14,
       #                             address => "0x0123456789abcdef...",
@@ -1140,12 +1140,12 @@ module Ccxt
       }
     end
 
-    def fetch_deposit_address(code, params = {})
-      self.load_markets
+    async def fetch_deposit_address(code, params = {})
+      await{ self.load_markets }
       currency = self.currency(code)
-      response = self.wapiGetDepositAddress(shallow_extend({
+      response = await{ self.wapiGetDepositAddress(self.shallow_extend({
         'asset' => currency['id']
-      }, params))
+      }, params)) }
       success = self.safe_value(response, 'success')
       if success.nil? || !success
         raise(InvalidAddress, self.id + ' fetchDepositAddress returned an empty response – create the deposit address in the user settings first.')
@@ -1161,8 +1161,8 @@ module Ccxt
       }
     end
 
-    def fetch_funding_fees(codes = nil, params = {})
-      response = self.wapiGetAssetDetail
+    async def fetch_funding_fees(codes = nil, params = {})
+      response = await{ self.wapiGetAssetDetail }
       #
       #     {
       #         "success" => true,
@@ -1198,9 +1198,9 @@ module Ccxt
       }
     end
 
-    def withdraw(code, amount, address, tag = nil, params = {})
+    async def withdraw(code, amount, address, tag = nil, params = {})
       self.check_address(address)
-      self.load_markets
+      await{ self.load_markets }
       currency = self.currency(code)
       name = address[0...20]
       request = {
@@ -1212,7 +1212,7 @@ module Ccxt
       if tag
         request['addressTag'] = tag
       end
-      response = self.wapiPostWithdraw(shallow_extend(request, params))
+      response = await{ self.wapiPostWithdraw(self.shallow_extend(request, params)) }
       return {
         'info' => response,
         'id' => self.safe_string(response, 'id')
@@ -1234,7 +1234,7 @@ module Ccxt
         }
       elsif (api == 'private') || (api == 'wapi' && path != 'systemStatus')
         self.check_required_credentials
-        query = self.urlencode(shallow_extend({
+        query = self.urlencode(self.shallow_extend({
           'timestamp' => self.nonce,
           'recvWindow' => self.options['recvWindow']
         }, params))
@@ -1265,13 +1265,13 @@ module Ccxt
       # following block cointains legacy checks against message patterns in "msg" property
       # will switch "code" checks eventually, when we know all of them
       if code >= 400
-        if body.index('Price * QTY is zero or less')
+        if body.include?('Price * QTY is zero or less')
           raise(InvalidOrder, self.id + ' order cost = amount * price is zero or less ' + body)
         end
-        if body.index('LOT_SIZE')
+        if body.include?('LOT_SIZE')
           raise(InvalidOrder, self.id + ' order amount should be evenly divisible by lot size ' + body)
         end
-        if body.index('PRICE_FILTER')
+        if body.include?('PRICE_FILTER')
           raise(InvalidOrder, self.id + ' order price is invalid, i.e. exceeds allowed price precision, exceeds min price or max price limits or is invalid float value in general, use self.price_to_precision(symbol, amount) ' + body)
         end
       end
@@ -1324,8 +1324,8 @@ module Ccxt
       end
     end
 
-    def request(path, api = 'public', method = 'GET', params = {}, headers = nil, body = nil)
-      response = self.fetch2(path, api, method, params, headers, body)
+    async def request(path, api = 'public', method = 'GET', params = {}, headers = nil, body = nil)
+      response = await{ self.fetch2(path, api, method, params, headers, body) }
       # a workaround for {"code":-2015,"msg":"Invalid API-key, IP, or permissions for action."}
       if (api == 'private') || (api == 'wapi')
         self.options['hasAlreadyAuthenticatedSuccessfully'] = true

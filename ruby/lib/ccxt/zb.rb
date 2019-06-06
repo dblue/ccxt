@@ -163,8 +163,8 @@ module Ccxt
       })
     end
 
-    def fetch_markets(params = {})
-      markets = self.publicGetMarkets
+    async def fetch_markets(params = {})
+      markets = await{ self.publicGetMarkets }
       keys = markets.keys
       result = []
       for i in (0...keys.length)
@@ -207,9 +207,9 @@ module Ccxt
       return result
     end
 
-    def fetch_balance(params = {})
-      self.load_markets
-      response = self.privateGetGetAccountInfo(params)
+    async def fetch_balance(params = {})
+      await{ self.load_markets }
+      response = await{ self.privateGetGetAccountInfo(params) }
       # todo => use self somehow
       # permissions = response['result']['base']
       balances = response['result']['coins']
@@ -244,15 +244,15 @@ module Ccxt
       return 'market'
     end
 
-    def fetch_deposit_address(code, params = {})
-      self.load_markets
+    async def fetch_deposit_address(code, params = {})
+      await{ self.load_markets }
       currency = self.currency(code)
-      response = self.privateGetGetUserAddress({
+      response = await{ self.privateGetGetUserAddress({
         'currency' => currency['id']
-      })
+      }) }
       address = response['message']['datas']['key']
       tag = nil
-      if address.index('_')
+      if address.include?('_')
         arr = address.split('_')
         address = arr[0]  # WARNING => MAY BE tag_address INSTEAD OF address_tag FOR SOME CURRENCIES!!
         tag = arr[1]
@@ -265,19 +265,19 @@ module Ccxt
       }
     end
 
-    def fetch_order_book(symbol, limit = nil, params = {})
-      self.load_markets
+    async def fetch_order_book(symbol, limit = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
       marketFieldName = self.get_market_field_name
       request = {}
       request[marketFieldName] = market['id']
-      orderbook = self.publicGetDepth(shallow_extend(request, params))
+      orderbook = await{ self.publicGetDepth(self.shallow_extend(request, params)) }
       return self.parse_order_book(orderbook)
     end
 
-    def fetch_tickers(symbols = nil, params = {})
-      self.load_markets
-      response = self.publicGetAllTicker(params)
+    async def fetch_tickers(symbols = nil, params = {})
+      await{ self.load_markets }
+      response = await{ self.publicGetAllTicker(params) }
       result = {}
       anotherMarketsById = {}
       marketIds = self.marketsById.keys
@@ -293,13 +293,13 @@ module Ccxt
       return result
     end
 
-    def fetch_ticker(symbol, params = {})
-      self.load_markets
+    async def fetch_ticker(symbol, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
       marketFieldName = self.get_market_field_name
       request = {}
       request[marketFieldName] = market['id']
-      response = self.publicGetTicker(shallow_extend(request, params))
+      response = await{ self.publicGetTicker(self.shallow_extend(request, params)) }
       ticker = response['ticker']
       return self.parse_ticker(ticker, market)
     end
@@ -335,8 +335,8 @@ module Ccxt
       }
     end
 
-    def fetch_ohlcv(symbol, timeframe = '1m', since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_ohlcv(symbol, timeframe = '1m', since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
       if limit.nil?
         limit = 1000
@@ -349,7 +349,7 @@ module Ccxt
       if since != nil
         request['since'] = since
       end
-      response = self.publicGetKline(shallow_extend(request, params))
+      response = await{ self.publicGetKline(self.shallow_extend(request, params)) }
       data = self.safe_value(response, 'data', [])
       return self.parse_ohlcvs(data, market, timeframe, since, limit)
     end
@@ -370,55 +370,55 @@ module Ccxt
       }
     end
 
-    def fetch_trades(symbol, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_trades(symbol, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
       marketFieldName = self.get_market_field_name
       request = {}
       request[marketFieldName] = market['id']
-      response = self.publicGetTrades(shallow_extend(request, params))
+      response = await{ self.publicGetTrades(self.shallow_extend(request, params)) }
       return self.parse_trades(response, market, since, limit)
     end
 
-    def create_order(symbol, type, side, amount, price = nil, params = {})
+    async def create_order(symbol, type, side, amount, price = nil, params = {})
       if type != 'limit'
         raise(InvalidOrder, self.id + ' allows limit orders only')
       end
-      self.load_markets
+      await{ self.load_markets }
       order = {
         'price' => self.price_to_precision(symbol, price),
         'amount' => self.amount_to_precision(symbol, amount),
         'tradeType' => (side == 'buy') ? '1' : '0',
         'currency' => self.market_id(symbol)
       }
-      response = self.privateGetOrder(shallow_extend(order, params))
+      response = await{ self.privateGetOrder(self.shallow_extend(order, params)) }
       return {
         'info' => response,
         'id' => response['id']
       }
     end
 
-    def cancel_order(id, symbol = nil, params = {})
-      self.load_markets
+    async def cancel_order(id, symbol = nil, params = {})
+      await{ self.load_markets }
       order = {
         'id' => id.to_s,
         'currency' => self.market_id(symbol)
       }
-      order = shallow_extend(order, params)
-      return self.privateGetCancelOrder(order)
+      order = self.shallow_extend(order, params)
+      return await{ self.privateGetCancelOrder(order) }
     end
 
-    def fetch_order(id, symbol = nil, params = {})
+    async def fetch_order(id, symbol = nil, params = {})
       if symbol.nil?
         raise(ArgumentsRequired, self.id + ' fetchOrder requires a symbol argument')
       end
-      self.load_markets
+      await{ self.load_markets }
       order = {
         'id' => id.to_s,
         'currency' => self.market_id(symbol)
       }
-      order = shallow_extend(order, params)
-      response = self.privateGetGetOrder(order)
+      order = self.shallow_extend(order, params)
+      response = await{ self.privateGetGetOrder(order) }
       #
       #     {
       #         'total_amount' => 0.01,
@@ -435,11 +435,11 @@ module Ccxt
       return self.parse_order(response, nil)
     end
 
-    def fetch_orders(symbol = nil, since = nil, limit = 50, params = {})
+    async def fetch_orders(symbol = nil, since = nil, limit = 50, params = {})
       if symbol.nil?
         raise(ExchangeError, self.id + 'fetchOrders requires a symbol parameter')
       end
-      self.load_markets
+      await{ self.load_markets }
       market = self.market(symbol)
       request = {
         'currency' => market['id'],
@@ -453,7 +453,7 @@ module Ccxt
       end
       response = nil
       begin
-        response = self.send_wrapper(method, shallow_extend(request, params))
+        response = await{ self.send_wrapper(method, self.shallow_extend(request, params)) }
       rescue BaseError => e
         if e.is_a?(OrderNotFound)
           return []
@@ -463,11 +463,11 @@ module Ccxt
       return self.parse_orders(response, market, since, limit)
     end
 
-    def fetch_open_orders(symbol = nil, since = nil, limit = 10, params = {})
+    async def fetch_open_orders(symbol = nil, since = nil, limit = 10, params = {})
       if symbol.nil?
         raise(ExchangeError, self.id + 'fetchOpenOrders requires a symbol parameter')
       end
-      self.load_markets
+      await{ self.load_markets }
       market = self.market(symbol)
       request = {
         'currency' => market['id'],
@@ -481,7 +481,7 @@ module Ccxt
       end
       response = nil
       begin
-        response = self.send_wrapper(method, shallow_extend(request, params))
+        response = await{ self.send_wrapper(method, self.shallow_extend(request, params)) }
       rescue BaseError => e
         if e.is_a?(OrderNotFound)
           return []
@@ -582,7 +582,7 @@ module Ccxt
           url += '?' + self.urlencode(params)
         end
       else
-        query = self.keysort(shallow_extend({
+        query = self.keysort(self.shallow_extend({
           'method' => path,
           'accesskey' => self.apiKey
         }, params))
@@ -590,7 +590,7 @@ module Ccxt
         query = self.keysort(query)
         auth = self.rawencode(query)
         secret = self.hash(self.encode(self.secret), 'sha1')
-        signature = self.hmac(self.encode(auth), self.encode(secret), md5)
+        signature = self.hmac(self.encode(auth), self.encode(secret), 'md5')
         suffix = 'sign=' + signature + '&reqTime=' + nonce.to_s
         url += '/' + path + '?' + auth + '&' + suffix
       end

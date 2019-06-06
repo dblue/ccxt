@@ -3,11 +3,18 @@ require 'ccxt/base/exchange'
 
 module Ccxt
   @exchanges = [
+    'gdax',
     'binance',
     'bitfinex',
     'bitmex',
+    'bittrex',
+    'coinbase',
+    'coinbaseprime',
+    'coinbasepro',
     'coss',
     'exx',
+    'gemini',
+    'hitbtc',
     'kraken',
     'kucoin',
     'livecoin',

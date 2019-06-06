@@ -120,8 +120,8 @@ module Ccxt
       })
     end
 
-    def fetch_markets(params = {})
-      response = self.publicGetExchangeInfo(params)
+    async def fetch_markets(params = {})
+      response = await{ self.publicGetExchangeInfo(params) }
       #
       #     {        timezone =>   "UTC",
       #           server_time =>    1545171487108,
@@ -200,8 +200,8 @@ module Ccxt
       return result
     end
 
-    def fetch_currencies(params = {})
-      response = self.webGetCoinsGetinfoAll(params)
+    async def fetch_currencies(params = {})
+      response = await{ self.webGetCoinsGetinfoAll(params) }
       #
       #     [{                 currency_code => "VET",
       #                                  name => "VeChain",
@@ -291,9 +291,9 @@ module Ccxt
       return result
     end
 
-    def fetch_balance(params = {})
-      self.load_markets
-      response = self.tradeGetAccountBalances(params)
+    async def fetch_balance(params = {})
+      await{ self.load_markets }
+      response = await{ self.tradeGetAccountBalances(params) }
       #
       #     [{ currency_code => "ETH",
       #               address => "0x6820511d43111a941d3e187b9e36ec64af763bde", # deposit address
@@ -336,14 +336,14 @@ module Ccxt
       ]
     end
 
-    def fetch_ohlcv(symbol, timeframe = '1m', since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_ohlcv(symbol, timeframe = '1m', since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
       request = {
         'symbol' => market['id'],
         'tt' => self.timeframes[timeframe]
       }
-      response = self.engineGetCs(shallow_extend(request, params))
+      response = await{ self.engineGetCs(self.shallow_extend(request, params)) }
       #
       #     {       tt =>   "1m",
       #         symbol =>   "ETH_BTC",
@@ -366,12 +366,12 @@ module Ccxt
       return self.parse_ohlcvs(response['series'], market, timeframe, since, limit)
     end
 
-    def fetch_order_book(symbol, limit = nil, params = {})
-      self.load_markets
+    async def fetch_order_book(symbol, limit = nil, params = {})
+      await{ self.load_markets }
       marketId = self.market_id(symbol)
       request = { 'symbol' => marketId }
       # limit argument is not supported on COSS's end
-      response = self.engineGetDp(shallow_extend(request, params))
+      response = await{ self.engineGetDp(self.shallow_extend(request, params)) }
       #
       #     { symbol =>   "COSS_ETH",
       #         asks => [["0.00065200", "214.15000000"],
@@ -458,9 +458,9 @@ module Ccxt
       }
     end
 
-    def fetch_tickers(symbols = nil, params = {})
-      self.load_markets
-      response = self.exchangeGetGetmarketsummaries(params)
+    async def fetch_tickers(symbols = nil, params = {})
+      await{ self.load_markets }
+      response = await{ self.exchangeGetGetmarketsummaries(params) }
       #
       #     { success =>    true,
       #       message =>   "",
@@ -508,18 +508,18 @@ module Ccxt
       return result
     end
 
-    def fetch_ticker(symbol, params = {})
-      tickers = self.fetch_tickers([symbol], params)
+    async def fetch_ticker(symbol, params = {})
+      tickers = await{ self.fetch_tickers([symbol], params) }
       return tickers[symbol]
     end
 
-    def fetch_trades(symbol, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_trades(symbol, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
       request = {
         'symbol' => market['id']
       }
-      response = self.engineGetHt(shallow_extend(request, params))
+      response = await{ self.engineGetHt(self.shallow_extend(request, params)) }
       #
       #     {  symbol =>   "COSS_ETH",
       #         limit =>    100,
@@ -641,11 +641,11 @@ module Ccxt
       return result
     end
 
-    def fetch_orders_by_type(type, symbol = nil, since = nil, limit = nil, params = {})
+    async def fetch_orders_by_type(type, symbol = nil, since = nil, limit = nil, params = {})
       if symbol.nil?
         raise(ArgumentsRequired, self.id + ' fetchOrders requires a symbol argument')
       end
-      self.load_markets
+      await{ self.load_markets }
       market = self.market(symbol)
       request = {
         # 'from_id' => 'b2a2d379-f9b6-418b-9414-cbf8330b20d1', # string(uuid), fetchOrders(all orders) only
@@ -657,7 +657,7 @@ module Ccxt
         request['limit'] = limit # max = default = 50
       end
       method = 'tradePostOrderList' + type
-      response = self.send_wrapper(method, shallow_extend(request, params))
+      response = await{ self.send_wrapper(method, self.shallow_extend(request, params)) }
       #
       # fetchOrders, fetchClosedOrders
       #
@@ -710,28 +710,28 @@ module Ccxt
       return self.parse_orders(orders, market, since, limit)
     end
 
-    def fetch_orders(symbol = nil, since = nil, limit = nil, params = {})
-      return self.fetch_orders_by_type('All', symbol, since, limit, params)
+    async def fetch_orders(symbol = nil, since = nil, limit = nil, params = {})
+      return await{ self.fetch_orders_by_type('All', symbol, since, limit, params) }
     end
 
-    def fetch_closed_orders(symbol = nil, since = nil, limit = nil, params = {})
-      return self.fetch_orders_by_type('Completed', symbol, since, limit, params)
+    async def fetch_closed_orders(symbol = nil, since = nil, limit = nil, params = {})
+      return await{ self.fetch_orders_by_type('Completed', symbol, since, limit, params) }
     end
 
-    def fetch_open_orders(symbol = nil, since = nil, limit = nil, params = {})
-      return self.fetch_orders_by_type('Open', symbol, since, limit, params)
+    async def fetch_open_orders(symbol = nil, since = nil, limit = nil, params = {})
+      return await{ self.fetch_orders_by_type('Open', symbol, since, limit, params) }
     end
 
-    def fetch_order(id, symbol = nil, params = {})
-      self.load_markets
-      response = self.tradePostOrderDetails(shallow_extend({
+    async def fetch_order(id, symbol = nil, params = {})
+      await{ self.load_markets }
+      response = await{ self.tradePostOrderDetails(self.shallow_extend({
         'order_id' => id
-      }, params))
+      }, params)) }
       return self.parse_order(response)
     end
 
-    def fetch_order_trades(id, symbol = nil, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_order_trades(id, symbol = nil, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       market = nil
       if symbol != nil
         market = self.market(symbol)
@@ -739,7 +739,7 @@ module Ccxt
       request = {
         'order_id' => id
       }
-      response = self.tradePostOrderTradeDetail(shallow_extend(request, params))
+      response = await{ self.tradePostOrderTradeDetail(self.shallow_extend(request, params)) }
       #
       #     [{         hex_id =>  null,
       #                 symbol => "COSS_ETH",
@@ -849,8 +849,8 @@ module Ccxt
       }
     end
 
-    def create_order(symbol, type, side, amount, price = nil, params = {})
-      self.load_markets
+    async def create_order(symbol, type, side, amount, price = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
       request = {
         'order_symbol' => market['id'],
@@ -859,7 +859,7 @@ module Ccxt
         'order_side' => side.upcase,
         'type' => type
       }
-      response = self.tradePostOrderAdd(shallow_extend(request, params))
+      response = await{ self.tradePostOrderAdd(self.shallow_extend(request, params)) }
       #
       #     {
       #         "order_id" => "9e5ae4dd-3369-401d-81f5-dff985e1c4ty",
@@ -880,17 +880,17 @@ module Ccxt
       return self.parse_order(response, market)
     end
 
-    def cancel_order(id, symbol = nil, params = {})
+    async def cancel_order(id, symbol = nil, params = {})
       if symbol.nil?
         raise(ArgumentsRequired, self.id + ' cancelOrder requires a symbol argument')
       end
-      self.load_markets
+      await{ self.load_markets }
       market = self.market(symbol)
       request = {
         'order_id' => id,
         'order_symbol' => market['id']
       }
-      response = self.tradeDeleteOrderCancel(shallow_extend(request, params))
+      response = await{ self.tradeDeleteOrderCancel(self.shallow_extend(request, params)) }
       #
       #     { order_symbol => "COSS_ETH",
       #           order_id => "30f2d698-39a0-4b9f-a3a6-a179542373bd",
@@ -911,7 +911,7 @@ module Ccxt
       if api == 'trade'
         self.check_required_credentials
         timestamp = self.nonce
-        query = shallow_extend({
+        query = self.shallow_extend({
           'timestamp' => timestamp, # required(int64)
           # 'recvWindow' => 10000, # optional(int32)
         }, params)

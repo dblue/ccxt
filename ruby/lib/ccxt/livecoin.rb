@@ -123,9 +123,9 @@ module Ccxt
       })
     end
 
-    def fetch_markets(params = {})
-      markets = self.publicGetExchangeTicker
-      restrictions = self.publicGetExchangeRestrictions
+    async def fetch_markets(params = {})
+      markets = await{ self.publicGetExchangeTicker }
+      restrictions = await{ self.publicGetExchangeRestrictions }
       restrictionsById = self.index_by(restrictions['restrictions'], 'currencyPair')
       result = []
       for p in (0...markets.length)
@@ -171,8 +171,8 @@ module Ccxt
       return result
     end
 
-    def fetch_currencies(params = {})
-      response = self.publicGetInfoCoinInfo(params)
+    async def fetch_currencies(params = {})
+      response = await{ self.publicGetInfoCoinInfo(params) }
       currencies = response['info']
       result = {}
       for i in (0...currencies.length)
@@ -251,14 +251,14 @@ module Ccxt
       for i in (0...currencies.length)
         currency = currencies[i]
         code = currency['code']
-        result[code] = shallow_extend(defaults, currency)
+        result[code] = self.shallow_extend(defaults, currency)
       end
       return result
     end
 
-    def fetch_balance(params = {})
-      self.load_markets
-      balances = self.privateGetPaymentBalances
+    async def fetch_balance(params = {})
+      await{ self.load_markets }
+      balances = await{ self.privateGetPaymentBalances }
       result = { 'info' => balances }
       for b in (0...balances.length)
         balance = balances[b]
@@ -283,9 +283,9 @@ module Ccxt
       return self.parse_balance(result)
     end
 
-    def fetch_trading_fees(params = {})
-      self.load_markets
-      response = self.privateGetExchangeCommissionCommonInfo(params)
+    async def fetch_trading_fees(params = {})
+      await{ self.load_markets }
+      response = await{ self.privateGetExchangeCommissionCommonInfo(params) }
       commission = self.safe_float(response, 'commission')
       return {
         'info' => response,
@@ -294,8 +294,8 @@ module Ccxt
       }
     end
 
-    def fetch_order_book(symbol, limit = nil, params = {})
-      self.load_markets
+    async def fetch_order_book(symbol, limit = nil, params = {})
+      await{ self.load_markets }
       request = {
         'currencyPair' => self.market_id(symbol),
         'groupByPrice' => 'false'
@@ -303,7 +303,7 @@ module Ccxt
       if limit != nil
         request['depth'] = limit # 100
       end
-      orderbook = self.publicGetExchangeOrderBook(shallow_extend(request, params))
+      orderbook = await{ self.publicGetExchangeOrderBook(self.shallow_extend(request, params)) }
       timestamp = orderbook['timestamp']
       return self.parse_order_book(orderbook, timestamp)
     end
@@ -345,9 +345,9 @@ module Ccxt
       }
     end
 
-    def fetch_tickers(symbols = nil, params = {})
-      self.load_markets
-      response = self.publicGetExchangeTicker(params)
+    async def fetch_tickers(symbols = nil, params = {})
+      await{ self.load_markets }
+      response = await{ self.publicGetExchangeTicker(params) }
       tickers = self.index_by(response, 'symbol')
       ids = tickers.keys
       result = {}
@@ -361,12 +361,12 @@ module Ccxt
       return result
     end
 
-    def fetch_ticker(symbol, params = {})
-      self.load_markets
+    async def fetch_ticker(symbol, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
-      ticker = self.publicGetExchangeTicker(shallow_extend({
+      ticker = await{ self.publicGetExchangeTicker(self.shallow_extend({
         'currencyPair' => market['id']
-      }, params))
+      }, params)) }
       return self.parse_ticker(ticker, market)
     end
 
@@ -437,11 +437,11 @@ module Ccxt
       }
     end
 
-    def fetch_my_trades(symbol = nil, since = nil, limit = nil, params = {})
+    async def fetch_my_trades(symbol = nil, since = nil, limit = nil, params = {})
       if symbol.nil?
         raise(ArgumentsRequired, self.id + ' fetchMyTrades requires a symbol argument')
       end
-      self.load_markets
+      await{ self.load_markets }
       market = self.market(symbol)
       request = {
         'currencyPair' => market['id'],
@@ -451,7 +451,7 @@ module Ccxt
       if limit != nil
         request['limit'] = limit
       end
-      response = self.privateGetExchangeTrades(shallow_extend(request, params))
+      response = await{ self.privateGetExchangeTrades(self.shallow_extend(request, params)) }
       #
       #     [
       #         {
@@ -479,13 +479,13 @@ module Ccxt
       return self.parse_trades(response, market, since, limit)
     end
 
-    def fetch_trades(symbol, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_trades(symbol, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       market = self.market(symbol)
       request = {
         'currencyPair' => market['id']
       }
-      response = self.publicGetExchangeLastTrades(shallow_extend(request, params))
+      response = await{ self.publicGetExchangeLastTrades(self.shallow_extend(request, params)) }
       #
       #     [
       #         {
@@ -507,12 +507,12 @@ module Ccxt
       return self.parse_trades(response, market, since, limit)
     end
 
-    def fetch_order(id, symbol = nil, params = {})
-      self.load_markets
+    async def fetch_order(id, symbol = nil, params = {})
+      await{ self.load_markets }
       request = {
         'orderId' => id
       }
-      response = self.privateGetExchangeOrder(shallow_extend(request, params))
+      response = await{ self.privateGetExchangeOrder(self.shallow_extend(request, params)) }
       return self.parse_order(response)
     end
 
@@ -532,7 +532,7 @@ module Ccxt
       if order.include?('lastModificationTime')
         timestamp = self.safe_string(order, 'lastModificationTime')
         if timestamp != nil
-          if timestamp.index('T')
+          if timestamp.include?('T')
             timestamp = self.parse8601(timestamp)
           else
             timestamp = self.safe_integer(order, 'lastModificationTime')
@@ -606,8 +606,8 @@ module Ccxt
       }
     end
 
-    def fetch_orders(symbol = nil, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_orders(symbol = nil, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       market = nil
       request = {}
       if symbol != nil
@@ -620,7 +620,7 @@ module Ccxt
       if limit != nil
         request['endRow'] = limit - 1
       end
-      response = self.privateGetExchangeClientOrders(shallow_extend(request, params))
+      response = await{ self.privateGetExchangeClientOrders(self.shallow_extend(request, params)) }
       result = []
       rawOrders = []
       if response['data']
@@ -633,22 +633,22 @@ module Ccxt
       return self.sort_by(result, 'timestamp')
     end
 
-    def fetch_open_orders(symbol = nil, since = nil, limit = nil, params = {})
+    async def fetch_open_orders(symbol = nil, since = nil, limit = nil, params = {})
       request = {
         'openClosed' => 'OPEN'
       }
-      return self.fetch_orders(symbol, since, limit, shallow_extend(request, params))
+      return await{ self.fetch_orders(symbol, since, limit, self.shallow_extend(request, params)) }
     end
 
-    def fetch_closed_orders(symbol = nil, since = nil, limit = nil, params = {})
+    async def fetch_closed_orders(symbol = nil, since = nil, limit = nil, params = {})
       request = {
         'openClosed' => 'CLOSED'
       }
-      return self.fetch_orders(symbol, since, limit, shallow_extend(request, params))
+      return await{ self.fetch_orders(symbol, since, limit, self.shallow_extend(request, params)) }
     end
 
-    def create_order(symbol, type, side, amount, price = nil, params = {})
-      self.load_markets
+    async def create_order(symbol, type, side, amount, price = nil, params = {})
+      await{ self.load_markets }
       method = 'privatePostExchange' + self.capitalize(side) + type
       market = self.market(symbol)
       request = {
@@ -658,7 +658,7 @@ module Ccxt
       if type == 'limit'
         request['price'] = self.price_to_precision(symbol, price)
       end
-      response = self.send_wrapper(method, shallow_extend(request, params))
+      response = await{ self.send_wrapper(method, self.shallow_extend(request, params)) }
       result = {
         'info' => response,
         'id' => response['orderId'].to_s
@@ -670,17 +670,17 @@ module Ccxt
       return result
     end
 
-    def cancel_order(id, symbol = nil, params = {})
+    async def cancel_order(id, symbol = nil, params = {})
       if symbol.nil?
         raise(ArgumentsRequired, self.id + ' cancelOrder requires a symbol argument')
       end
-      self.load_markets
+      await{ self.load_markets }
       market = self.market(symbol)
       currencyPair = market['id']
-      response = self.privatePostExchangeCancellimit(shallow_extend({
+      response = await{ self.privatePostExchangeCancellimit(self.shallow_extend({
         'orderId' => id,
         'currencyPair' => currencyPair
-      }, params))
+      }, params)) }
       message = self.safe_string(response, 'message', self.json(response))
       if response.include?('success')
         if !response['success']
@@ -699,11 +699,11 @@ module Ccxt
       raise(ExchangeError, self.id + ' cancelOrder failed => ' + self.json(response))
     end
 
-    def withdraw(code, amount, address, tag = nil, params = {})
+    async def withdraw(code, amount, address, tag = nil, params = {})
       # Sometimes the response with be { key => null } for all keys.
       # An example is if you attempt to withdraw more than is allowed when withdrawal fees are considered.
       self.check_address(address)
-      self.load_markets
+      await{ self.load_markets }
       currency = self.currency(code)
       wallet = address
       if tag != nil
@@ -714,7 +714,7 @@ module Ccxt
         'currency' => currency['id'],
         'wallet' => wallet
       }
-      response = self.privatePostPaymentOutCoin(shallow_extend(request, params))
+      response = await{ self.privatePostPaymentOutCoin(self.shallow_extend(request, params)) }
       id = self.safe_integer(response, 'id')
       if id.nil?
         raise(InsufficientFunds, self.id + ' insufficient funds to cover requested withdrawal amount post fees ' + self.json(response))
@@ -787,8 +787,8 @@ module Ccxt
       }
     end
 
-    def fetch_deposits(code = nil, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_deposits(code = nil, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       endtime = 2505600000 # 29 days - exchange has maximum 30 days.
       now = self.milliseconds
       request = {
@@ -803,12 +803,12 @@ module Ccxt
       if limit != nil
         request['limit'] = limit # default is 100
       end
-      response = self.privateGetPaymentHistoryTransactions(shallow_extend(request, params))
+      response = await{ self.privateGetPaymentHistoryTransactions(self.shallow_extend(request, params)) }
       return self.parseTransactions(response, currency, since, limit)
     end
 
-    def fetch_withdrawals(code = nil, since = nil, limit = nil, params = {})
-      self.load_markets
+    async def fetch_withdrawals(code = nil, since = nil, limit = nil, params = {})
+      await{ self.load_markets }
       endtime = 2505600000 # 29 days - exchange has maximum 30 days.
       now = self.milliseconds
       request = {
@@ -826,18 +826,18 @@ module Ccxt
       if since != nil
         request['start'] = since
       end
-      response = self.privateGetPaymentHistoryTransactions(shallow_extend(request, params))
+      response = await{ self.privateGetPaymentHistoryTransactions(self.shallow_extend(request, params)) }
       return self.parseTransactions(response, currency, since, limit)
     end
 
-    def fetch_deposit_address(currency, params = {})
+    async def fetch_deposit_address(currency, params = {})
       request = {
         'currency' => currency
       }
-      response = self.privateGetPaymentGetAddress(shallow_extend(request, params))
+      response = await{ self.privateGetPaymentGetAddress(self.shallow_extend(request, params)) }
       address = self.safe_string(response, 'wallet')
       tag = nil
-      if address.index(':')
+      if address.include?(':')
         parts = address.split(':')
         address = parts[0]
         tag = parts[2]
@@ -864,7 +864,7 @@ module Ccxt
         if method == 'POST'
           body = query
         end
-        signature = self.hmac(self.encode(query), self.encode(self.secret), sha256)
+        signature = self.hmac(self.encode(query), self.encode(self.secret), 'sha256')
         headers = {
           'Api-Key' => self.apiKey,
           'Sign' => signature.upcase,
@@ -894,13 +894,13 @@ module Ccxt
         if !success
           message = self.safe_string(response, 'message')
           if message != nil
-            if message.index('Cannot find order')
+            if message.include?('Cannot find order')
               raise(OrderNotFound, self.id + ' ' + body)
             end
           end
           exception = self.safe_string(response, 'exception')
           if exception != nil
-            if exception.index('Minimal amount is')
+            if exception.include?('Minimal amount is')
               raise(InvalidOrder, self.id + ' ' + body)
             end
           end

@@ -63,8 +63,8 @@ module Ccxt
       }
     end
 
-    def fetch_markets(params = {})
-      markets = super(params)
+    async def fetch_markets(params = {})
+      markets = await{ super(params) }
       # TODO => they have a new fee schedule as of Feb 7
       # the new fees are progressive and depend on 30-day traded volume
       # the following is the worst case
@@ -80,26 +80,26 @@ module Ccxt
       return markets
     end
 
-    def fetch_tickers_from_api(symbols = nil, params = {})
-      self.load_markets
+    async def fetch_tickers_from_api(symbols = nil, params = {})
+      await{ self.load_markets }
       request = {}
-      response = self.publicGetTickers(shallow_extend(request, params))
+      response = await{ self.publicGetTickers(self.shallow_extend(request, params)) }
       tickers = response['tickers']
       timestamp = (response['date']).to_i * 1000
       result = {}
       for i in (0...tickers.length)
         ticker = tickers[i]
-        ticker = self.parse_ticker(shallow_extend(tickers[i], { 'timestamp' => timestamp }))
+        ticker = self.parse_ticker(self.shallow_extend(tickers[i], { 'timestamp' => timestamp }))
         symbol = ticker['symbol']
         result[symbol] = ticker
       end
       return result
     end
 
-    def fetch_tickers_from_web(symbols = nil, params = {})
-      self.load_markets
+    async def fetch_tickers_from_web(symbols = nil, params = {})
+      await{ self.load_markets }
       request = {}
-      response = self.webGetSpotMarketsTickers(shallow_extend(request, params))
+      response = await{ self.webGetSpotMarketsTickers(self.shallow_extend(request, params)) }
       tickers = response['data']
       result = {}
       for i in (0...tickers.length)
@@ -110,9 +110,9 @@ module Ccxt
       return result
     end
 
-    def fetch_tickers(symbols = nil, params = {})
+    async def fetch_tickers(symbols = nil, params = {})
       method = self.options['fetchTickersMethod']
-      response = self.send_wrapper(method, symbols, params)
+      response = await{ self.send_wrapper(method, symbols, params) }
       return response
     end
   end
