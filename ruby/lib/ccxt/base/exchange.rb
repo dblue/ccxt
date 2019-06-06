@@ -723,11 +723,12 @@ module Ccxt
       response = nil
       http_response = nil
       json_response = nil
-      Async do
+      Async do |task|
         internet = Async::HTTP::Internet.new
-        response = internet.call(method, url, request_headers.to_a, '')
-        
-        puts "Reading response status=#{response.status}..."
+        task.with_timeout(timeout/1000.0) do
+          response = internet.call(method, url, request_headers.to_a, '')
+        end
+        puts "Reading response status=#{response.status}..." if verbose
 	
         http_response = response.read
         json_response = is_json_encoded_object(http_response) ? JSON.parse(http_response) : nil
@@ -738,11 +739,8 @@ module Ccxt
         self.last_response_headers = headers if self.enableLastResponseHeaders
         puts "\nResponse:\nmethod: #{method.inspect}\nurl: #{url.inspect}\nstatus: #{response.status.inspect}\nheaders: #{headers.inspect}\nhttp_response: #{http_response}" if self.verbose
 
-        # rescue Timeout
-        #    except Timeout as e:
-        #        self.raise_error(RequestTimeout, method, url, e)
-        # rescue RestClient::RequestTimeout => e
-        # self.raise_error(RequestTimeout, method, url, e)
+      rescue Async::TimeoutError => e
+        self.raise_error(RequestTimeout, method, url, e)
 
         #    except TooManyRedirects as e:
         #        self.raise_error(ExchangeError, url, method, e)
