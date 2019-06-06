@@ -401,7 +401,7 @@ const rubyRegexes = [
     [ /this\.stringToBase64\s/g, 'Base64.encode64' ],
     [ /this\.base64ToBinary\s/g, 'Base64.decode64' ],
     [ /\.shift\s*\(\)/g, '.pop(0)' ],
-    [ /(\s)continue(\s)/g, '$1next$2']
+    [ /(\s)continue;/g, '$1next$2']
 //    [ /this\.extend/g, 'array_merge' ],
 //    [ /this\.extend\s*\(\s*(.*)\s*,\s*(.*)\)/g, '.shallow_extend($1, $2)'],
 
